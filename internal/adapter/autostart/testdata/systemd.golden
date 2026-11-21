@@ -1,0 +1,16 @@
+[Unit]
+Description=snctl mirror: local folders kept in step with the Supernote cloud
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart="/opt/My Apps/snctl" "mirror" "run" "--service"
+Environment="SNCTL_CONFIG_DIR=/data/<config> & 100%%"
+Environment="SNCTL_PROFILE=work"
+Environment="SNCTL_SECRETS=file"
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

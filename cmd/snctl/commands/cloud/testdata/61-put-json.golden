@@ -1,0 +1,13 @@
+[
+  {
+    "id": "10",
+    "name": "sample.txt",
+    "path": "Note/named.txt",
+    "folder": false,
+    "size": null,
+    "hash": "",
+    "modified": null,
+    "recognition": null,
+    "flags": []
+  }
+]

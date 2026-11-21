@@ -1,0 +1,13 @@
+create	DOCUMENT/Document/In	-	-	-
+create	DOCUMENT/Document/In/sub	-	-	-
+create	DOCUMENT/Document/In/sub/deep	-	-	-
+upload	DOCUMENT/Document/In/a.note	$ROOT/src/a.note	5	-
+upload	DOCUMENT/Document/In/sub/b.pdf	$ROOT/src/sub/b.pdf	4	-
+upload	DOCUMENT/Document/In/sub/deep/c.epub	$ROOT/src/sub/deep/c.epub	5	-
+skipped	-	$ROOT/src/.hidden	0	hidden folder
+skipped	-	$ROOT/src/empty.pdf	0	empty file
+skipped	-	$ROOT/src/skip.txt	0	not a .note, .mark, .pdf or .epub file
+
+upload	3
+create	3
+skipped	3

@@ -1,0 +1,144 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  validate:
+    name: Validate manually selected tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Require an existing version tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: bash .github/scripts/validate-release-tag.sh "$TAG"
+  checks:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+  build:
+    name: Package
+    needs: checks
+    uses: ./.github/workflows/release-package.yml
+    with:
+      ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      version: ${{ inputs.tag || github.ref_name }}
+      dry-run: false
+  release:
+    needs: build
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: snctl-*
+          path: artifacts
+          merge-multiple: true
+      - name: Require all eight Linux and Windows archives and write checksums
+        env:
+          VERSION: ${{ inputs.tag || github.ref_name }}
+        run: |
+          for name in snctl snctl-lite; do
+            for os in linux windows; do
+              extension=zip
+              if [[ "$os" == linux ]]; then
+                extension=tar.gz
+              fi
+              for arch in amd64 arm64; do
+                test -s "artifacts/${name}_${VERSION#v}_${os}_${arch}.$extension"
+              done
+            done
+          done
+          bash .github/scripts/checksums.sh artifacts
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: v2.19.0
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.tag || github.ref_name }}
+
+  scoop:
+    name: Scoop manifest
+    needs: release
+    if: ${{ !contains(inputs.tag || github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Require the bucket token
+        id: token
+        env:
+          BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+        run: |
+          if [[ -z "$BUCKET_TOKEN" ]]; then
+            echo "::warning::SCOOP_BUCKET_TOKEN is not set; the Scoop manifest is not updated"
+            echo "set=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "set=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.token.outputs.set == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+
+      - name: Write the manifests
+        # snctl.json and snctl-lite.json, from the same checksums.txt.
+        if: steps.token.outputs.set == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern checksums.txt --dir artifacts
+          .github/scripts/scoop-manifest.sh "${TAG#v}" artifacts/checksums.txt > snctl.json
+          .github/scripts/scoop-manifest.sh --lite "${TAG#v}" artifacts/checksums.txt > snctl-lite.json
+          cat snctl.json snctl-lite.json
+
+      - name: Check out the bucket
+        if: steps.token.outputs.set == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: altessa-s/scoop-bucket
+          path: bucket
+          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+
+      - name: Push them to the bucket
+        if: steps.token.outputs.set == 'true'
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          mkdir -p bucket/bucket
+          cp snctl.json snctl-lite.json bucket/bucket/
+          cd bucket
+          git add bucket/snctl.json bucket/snctl-lite.json
+          if git diff --cached --quiet; then
+            echo "the manifests are already current"
+            exit 0
+          fi
+          git -c user.name=DM -c user.email=dm@altessa-s.com commit -m "feat(snctl): update to ${TAG#v}"
+          git push origin HEAD

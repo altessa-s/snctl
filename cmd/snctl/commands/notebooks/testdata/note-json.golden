@@ -1,0 +1,84 @@
+{
+  "name": "sample.mark",
+  "kind": "mark",
+  "format_version": 20260016,
+  "device": "N6",
+  "pages": [
+    {
+      "number": 1,
+      "width": 1404,
+      "height": 1872,
+      "orientation": "",
+      "template": "",
+      "layers": [
+        "MAINLAYER"
+      ],
+      "strokes": 3,
+      "skipped_strokes": 0,
+      "text": [
+        "Typed text"
+      ],
+      "recognition": "Recognized words"
+    },
+    {
+      "number": 2,
+      "width": 1404,
+      "height": 1872,
+      "orientation": "",
+      "template": "",
+      "layers": [],
+      "strokes": 0,
+      "skipped_strokes": 0,
+      "text": [],
+      "recognition": ""
+    }
+  ],
+  "titles": [
+    {
+      "page": 1,
+      "level": 1,
+      "text": ""
+    },
+    {
+      "page": 2,
+      "level": 2,
+      "text": "Heading"
+    }
+  ],
+  "highlights": [
+    {
+      "text": null,
+      "page": 1,
+      "color": 2,
+      "comment": "A useful passage",
+      "rects": [
+        null,
+        {
+          "x": 1,
+          "y": 2,
+          "width": 3,
+          "height": 4
+        }
+      ],
+      "document_rects": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 4,
+          "height": 0
+        }
+      ]
+    },
+    {
+      "text": null,
+      "page": 2,
+      "color": 0,
+      "comment": null,
+      "rects": [],
+      "document_rects": []
+    }
+  ],
+  "links": 0,
+  "keywords": 0,
+  "skipped_pages": 0
+}

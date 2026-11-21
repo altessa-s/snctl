@@ -1,0 +1,120 @@
+name: Release packaging
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+      version:
+        required: true
+        type: string
+      dry-run:
+        description: Build and smoke locally without uploading artifacts
+        required: false
+        default: true
+        type: boolean
+permissions:
+  contents: read
+jobs:
+  package:
+    name: ${{ matrix.variant }} (${{ matrix.goos }}/${{ matrix.goarch }})
+    timeout-minutes: ${{ matrix.variant == 'full' && 60 || 30 }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-latest, goos: linux, goarch: amd64, variant: full}
+          - {runner: ubuntu-24.04-arm, goos: linux, goarch: arm64, variant: full}
+          - {runner: windows-2022, goos: windows, goarch: amd64, variant: full, msystem: CLANG64, prefix: mingw-w64-clang-x86_64}
+          - {runner: windows-11-arm, goos: windows, goarch: arm64, variant: full, msystem: CLANGARM64, prefix: mingw-w64-clang-aarch64}
+          - {runner: ubuntu-latest, goos: linux, goarch: amd64, variant: lite}
+          - {runner: ubuntu-24.04-arm, goos: linux, goarch: arm64, variant: lite}
+          - {runner: windows-2022, goos: windows, goarch: amd64, variant: lite, msystem: CLANG64, prefix: mingw-w64-clang-x86_64}
+          - {runner: windows-11-arm, goos: windows, goarch: arm64, variant: lite, msystem: CLANGARM64, prefix: mingw-w64-clang-aarch64}
+    defaults:
+      run:
+        shell: ${{ matrix.goos == 'windows' && 'msys2 {0}' || 'bash' }}
+    env:
+      CGO_ENABLED: '1'
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: '**/go.sum'
+      - name: Download Go modules
+        shell: bash
+        run: go mod download
+      - name: Set up Cairo and PDFium
+        if: matrix.goos == 'linux' && matrix.variant == 'full'
+        shell: bash
+        run: bash .github/scripts/setup-render-linux.sh '$ORIGIN'
+      - name: Install the Linux C23 compiler
+        if: matrix.goos == 'linux' && matrix.variant == 'lite'
+        shell: bash
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends clang-19
+          echo 'CC=clang-19' >> "$GITHUB_ENV"
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        if: matrix.goos == 'windows'
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: false
+          path-type: inherit
+          install: >-
+            ${{ matrix.prefix }}-clang
+            ${{ matrix.prefix }}-llvm
+            ${{ matrix.prefix }}-python
+            ${{ matrix.variant == 'full' && format('{0}-pkgconf {0}-cairo {0}-freetype {0}-gdk-pixbuf2 {0}-zlib {0}-ntldd', matrix.prefix) || '' }}
+            ${{ matrix.variant == 'full' && 'base-devel' || '' }}
+            zip
+            unzip
+      - name: Build libtiff without JBIG
+        if: matrix.goos == 'windows' && matrix.variant == 'full'
+        run: bash .github/scripts/setup-release-tiff.sh
+      - name: Set up the native compiler and PDFium
+        if: matrix.goos == 'windows' && matrix.variant == 'full'
+        shell: msys2 {0}
+        run: bash .github/scripts/setup-render-windows.sh
+      - name: Set up the Windows lite compiler
+        if: matrix.goos == 'windows' && matrix.variant == 'lite'
+        shell: msys2 {0}
+        run: echo 'CC=clang' >> "$GITHUB_ENV"
+      - name: Build, package, smoke and checksum
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          args=()
+          if [[ "$DRY_RUN" == true ]]; then
+            args+=(--dry-run)
+          fi
+          bash .github/scripts/release-build.sh "${args[@]}" "$VERSION" "$VARIANT"
+          name=snctl
+          if [[ "$VARIANT" == lite ]]; then
+            name=snctl-lite
+          fi
+          extension=tar.gz
+          if [[ "$GOOS" == windows ]]; then
+            extension=zip
+          fi
+          bash .github/scripts/smoke-archive.sh "$(pwd)/bin/release/${name}_${VERSION#v}_${GOOS}_${GOARCH}.$extension" "$VERSION"
+          bash .github/scripts/checksums.sh bin/release
+          (cd bin/release && bash ../../.github/scripts/sha256.sh -c checksums.txt)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !inputs.dry-run }}
+        with:
+          name: snctl-${{ matrix.goos }}-${{ matrix.goarch }}-${{ matrix.variant }}
+          path: |
+            bin/release/*.zip
+            bin/release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7

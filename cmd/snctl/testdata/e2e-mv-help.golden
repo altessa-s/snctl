@@ -1,0 +1,35 @@
+Move an entry into an existing folder, keeping its name, or to a new full
+tablet path whose parent exists. rename accepts only a new filename and
+keeps the parent folder. A document carries its full-name .mark sidecar.
+Occupied destinations, including the target sidecar, are refused before
+writing. NFC-equivalent source siblings are refused; --exact selects only the
+byte-exact name (absent means not-found). Document/sidecar pairing must stay
+unambiguous, including with --exact. These commands take paths, not IDs.
+Re-check parents fresh after confirmation (changes: exit 4). Verify
+destinations after writing. Twins or a failed listing mean exit 6; the
+write is retained, with no rollback.
+Ask before changing the cloud; --yes answers. --dry-run lists both paths
+without changing anything. Standard output reports the destination.
+
+Usage:
+  snctl mv <path> <destination> [flags]
+
+Examples:
+snctl mv DOCUMENT/Document/Draft.pdf DOCUMENT/Document/Archive --yes
+snctl rename NOTE/Note/Journal.note Diary.note --yes
+
+Flags:
+      --dry-run[=true|false]   list document and sidecar changes without writing
+      --exact[=true|false]     select only the byte-exact source name; document/sidecar pairing must stay unambiguous
+  -h, --help[=true|false]      help for mv
+
+Global Flags:
+      --color string            color a table: auto, always or never (default "auto")
+      --format string           answer format: table, plain or json (or SNCTL_FORMAT; default: table on a terminal, plain otherwise)
+      --json[=true|false]       print answers as JSON (the same as --format json)
+      --no-cache[=true|false]   neither read nor write the cache on disk
+      --offline[=true|false]    read cached listings and bodies without any request
+  -P, --profile string          account profile (or SNCTL_PROFILE)
+      --quiet[=true|false]      hide progress lines
+  -v, --verbose[=true|false]    log what happens on standard error
+  -y, --yes[=true|false]        confirm a command that changes settings or cloud data

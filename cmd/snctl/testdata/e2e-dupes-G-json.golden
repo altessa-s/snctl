@@ -1,0 +1,41 @@
+[
+  {
+    "hash": "36a92cc94a9e0fa21f625f8bfb007adf",
+    "size": 100,
+    "files": [
+      {
+        "id": "13",
+        "name": "dup.note",
+        "path": "NOTE/Note/G/dup.note",
+        "folder": false,
+        "size": 100,
+        "hash": "36a92cc94a9e0fa21f625f8bfb007adf",
+        "modified": "2023-11-14T22:13:33Z",
+        "recognition": null,
+        "flags": []
+      },
+      {
+        "id": "8",
+        "name": "file00.note",
+        "path": "NOTE/Note/G/file00.note",
+        "folder": false,
+        "size": 100,
+        "hash": "36a92cc94a9e0fa21f625f8bfb007adf",
+        "modified": "2023-11-14T22:13:28Z",
+        "recognition": null,
+        "flags": []
+      },
+      {
+        "id": "28",
+        "name": "file00.note",
+        "path": "NOTE/Note/G/x/file00.note",
+        "folder": false,
+        "size": 100,
+        "hash": "36a92cc94a9e0fa21f625f8bfb007adf",
+        "modified": "2023-11-14T22:13:43Z",
+        "recognition": null,
+        "flags": []
+      }
+    ]
+  }
+]

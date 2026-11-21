@@ -1,0 +1,9 @@
+PATH             SIZE  FILES
+──────────────  ─────  ─────
+/NOTE/Note/G    503 B  5
+/NOTE/Note/G/a  203 B  2
+/NOTE/Note/G/x  100 B  1
+
+used      906 B
+capacity  1.0 GiB
+recycled  0 B

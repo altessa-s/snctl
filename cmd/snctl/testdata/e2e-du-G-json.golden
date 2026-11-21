@@ -1,0 +1,25 @@
+{
+  "folders": [
+    {
+      "path": "/NOTE/Note/G",
+      "depth": 0,
+      "bytes": 503,
+      "files": 5
+    },
+    {
+      "path": "/NOTE/Note/G/a",
+      "depth": 1,
+      "bytes": 203,
+      "files": 2
+    },
+    {
+      "path": "/NOTE/Note/G/x",
+      "depth": 1,
+      "bytes": 100,
+      "files": 1
+    }
+  ],
+  "recycled": 0,
+  "used": 906,
+  "capacity": 1073741824
+}

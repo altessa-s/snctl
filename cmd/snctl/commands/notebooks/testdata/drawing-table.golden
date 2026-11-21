@@ -1,0 +1,10 @@
+[2mname[0m           drawing.spd
+[2mkind[0m           drawing
+[2mcanvas width[0m   256
+[2mcanvas height[0m  128
+[2mlayers[0m         1
+[2mtiles[0m          3
+
+[1mLAYER_ID[0m  [1mNAME[0m  [1mTILES[0m
+[2m────────[0m  [2m────[0m  [2m─────[0m
+1         Ink   3

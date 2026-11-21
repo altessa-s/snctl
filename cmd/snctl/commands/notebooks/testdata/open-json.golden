@@ -1,0 +1,7 @@
+{
+  "path": "sample.pdf",
+  "pages": 2,
+  "sheets_only": true,
+  "skipped_pages": 0
+}
+.mark rendered as annotation sheets only; the source PDF or EPUB is not included

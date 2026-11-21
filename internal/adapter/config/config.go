@@ -1,0 +1,185 @@
+// Copyright 2026 ALTESSA SOLUTIONS INC.
+// Use of this source code is governed by the MIT license that can be found in
+// the LICENSE file.
+
+package config
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/altessa-s/snctl/internal/domain"
+)
+
+// The environment variables that select profiles and local paths.
+const (
+	EnvProfile   = "SNCTL_PROFILE"
+	EnvConfigDir = "SNCTL_CONFIG_DIR"
+	EnvCacheDir  = "SNCTL_CACHE_DIR"
+)
+
+// DefaultProfile is the profile used when none is named.
+const DefaultProfile = "default"
+
+// appDir is the directory snctl keeps under the system's base directories.
+const appDir = "snctl"
+
+// tokenFile is the name of the token file inside a profile's directory.
+const tokenFile = "token.json"
+
+var profileName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+
+// ErrProfile means a profile name is not a safe directory name.
+var ErrProfile = errors.New("a profile name is 1-64 characters of a-z, 0-9, _ and -, starting with a letter or digit")
+
+// Config is where a profile keeps its token and the cache, and which hosts
+// it talks to.
+type Config struct {
+	Budget  Budget
+	Budgets Budgets
+	TTL     time.Duration
+	Offline bool
+	Profile string
+	// ConfigRoot is the directory of every profile's directory, and
+	// ConfigDir the profile's own, which holds its token file.
+	ConfigRoot string
+	ConfigDir  string
+	// CacheDir is the cache directory of every profile; each profile's
+	// cache is the subdirectory named after it, and shares nothing.
+	CacheDir  string
+	TokenPath string
+	Endpoint  string
+	// ConfigFile is the configuration file read, present or not, and
+	// ProfileTable whether it holds a table of the profile's own.
+	ConfigFile   string
+	ProfileTable bool
+	// Secrets is the token backend, BackendFile or BackendKeychain, and
+	// SecretsSource what chose it.
+	Secrets       string
+	SecretsSource string
+	// KeychainService is SNCTL_KEYCHAIN_SERVICE, or empty for the default.
+	KeychainService string
+}
+
+// BaseDirs are the system's per-user configuration and cache directories.
+type BaseDirs struct {
+	Config string
+	Cache  string
+}
+
+// SystemDirs are the base directories of this machine and user.
+func SystemDirs() (BaseDirs, error) {
+	cfg, err := os.UserConfigDir()
+	if err != nil {
+		return BaseDirs{}, fmt.Errorf("find the configuration directory: %w", err)
+	}
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return BaseDirs{}, fmt.Errorf("find the cache directory: %w", err)
+	}
+	return BaseDirs{Config: cfg, Cache: cache}, nil
+}
+
+// Load resolves the configuration from env (not the process environment),
+// the --profile flag and the base directories, without a configuration
+// file. The flag wins over SNCTL_PROFILE; SNCTL_CONFIG_DIR and
+// SNCTL_CACHE_DIR replace the snctl directories under dirs.
+func Load(env map[string]string, profileFlag string, dirs BaseDirs) (Config, error) {
+	return LoadFrom(env, profileFlag, dirs, nil)
+}
+
+// LoadFrom is Load with the configuration file read through read: the file
+// is SNCTL_CONFIG_FILE, or config.toml in the snctl configuration directory.
+// A nil read reads no file. The token backend is SNCTL_SECRETS, then the
+// profile's table, then the file's [secrets], then the file backend.
+func LoadFrom(env map[string]string, profileFlag string, dirs BaseDirs, read ReadFunc) (Config, error) {
+	profile := profileFlag
+	if profile == "" {
+		profile = env[EnvProfile]
+	}
+	if profile == "" {
+		profile = DefaultProfile
+	}
+	if !profileName.MatchString(profile) {
+		return Config{}, fmt.Errorf("profile %q: %w", profile, ErrProfile)
+	}
+	configRoot := env[EnvConfigDir]
+	if configRoot == "" {
+		if dirs.Config == "" {
+			return Config{}, errors.New("no configuration directory: set " + EnvConfigDir)
+		}
+		configRoot = filepath.Join(dirs.Config, appDir)
+	}
+	cacheDir := env[EnvCacheDir]
+	if cacheDir == "" {
+		if dirs.Cache == "" {
+			return Config{}, errors.New("no cache directory: set " + EnvCacheDir)
+		}
+		cacheDir = filepath.Join(dirs.Cache, appDir)
+	}
+	var err error
+	configPath := env[EnvConfigFile]
+	if configPath == "" {
+		configPath = filepath.Join(configRoot, configFile)
+	}
+	var file File
+	if read != nil {
+		data, exists, rerr := read(configPath)
+		if rerr != nil {
+			return Config{}, rerr
+		}
+		if exists {
+			if file, err = ParseFile(data); err != nil {
+				return Config{}, fmt.Errorf("%s: %w", configPath, err)
+			}
+		}
+	}
+	backend, source, err := backendOf(env, file, profile)
+	if err != nil {
+		return Config{}, err
+	}
+	endpoint, err := domain.Endpoint(file.Profiles[profile].Endpoint)
+	if err != nil {
+		return Config{}, err
+	}
+	budgets, err := budgetsOf(env, file)
+	if err != nil {
+		return Config{}, err
+	}
+	ttl, offline, err := cacheSettings(env, file, profile)
+	if err != nil {
+		return Config{}, err
+	}
+	configDir := filepath.Join(configRoot, profile)
+	_, table := file.Profiles[profile]
+	return Config{
+		Budget: budgets.Of(profile), Budgets: budgets, TTL: ttl, Offline: offline,
+		ConfigRoot:      configRoot,
+		ProfileTable:    table,
+		Profile:         profile,
+		ConfigDir:       configDir,
+		CacheDir:        cacheDir,
+		TokenPath:       filepath.Join(configDir, tokenFile),
+		Endpoint:        endpoint,
+		ConfigFile:      configPath,
+		Secrets:         backend,
+		SecretsSource:   source,
+		KeychainService: env[EnvKeychainService],
+	}, nil
+}
+
+// Environ is the process environment as a map, for Load.
+func Environ() map[string]string {
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		if key, value, ok := strings.Cut(kv, "="); ok {
+			env[key] = value
+		}
+	}
+	return env
+}

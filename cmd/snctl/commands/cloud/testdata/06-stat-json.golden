@@ -1,0 +1,11 @@
+{
+  "id": "10",
+  "name": "sample.txt",
+  "path": "Note/sample.txt",
+  "folder": false,
+  "size": 3,
+  "hash": "",
+  "modified": null,
+  "recognition": null,
+  "flags": []
+}

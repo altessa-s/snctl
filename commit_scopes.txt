@@ -1,0 +1,16 @@
+# Local behavior
+cli
+profile
+secrets
+config
+output
+wiring
+domain
+# Repository support
+deps
+docs
+ci
+tests
+tooling
+cloud                       # The adapter over sncloud-go and the ports of the cloud commands
+check                       # The live self-test

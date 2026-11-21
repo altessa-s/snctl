@@ -1,0 +1,40 @@
+{
+  "items": [
+    {
+      "status": "unchanged",
+      "cloud": "DOCUMENT/Document/G/a/b/file02.note",
+      "local": "out/a/b/file02.note",
+      "size": 102
+    },
+    {
+      "status": "unchanged",
+      "cloud": "DOCUMENT/Document/G/a/file01.note",
+      "local": "out/a/file01.note",
+      "size": 101
+    },
+    {
+      "status": "unchanged",
+      "cloud": "DOCUMENT/Document/G/dup.note",
+      "local": "out/dup.note",
+      "size": 100
+    },
+    {
+      "status": "unchanged",
+      "cloud": "DOCUMENT/Document/G/file00.note",
+      "local": "out/file00.note",
+      "size": 100
+    },
+    {
+      "status": "skipped",
+      "cloud": "",
+      "local": "out/.snctl-mget.json",
+      "size": 0,
+      "reason": "hidden file"
+    }
+  ],
+  "counts": {
+    "skipped": 1,
+    "unchanged": 4
+  },
+  "dry_run": true
+}

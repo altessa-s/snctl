@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "status": "downloaded",
+      "cloud": "NOTE/Note/G/a/b/file02.note",
+      "local": "out/a/b/file02.note",
+      "size": 102
+    },
+    {
+      "status": "downloaded",
+      "cloud": "NOTE/Note/G/a/file01.note",
+      "local": "out/a/file01.note",
+      "size": 101
+    },
+    {
+      "status": "downloaded",
+      "cloud": "NOTE/Note/G/dup.note",
+      "local": "out/dup.note",
+      "size": 100
+    },
+    {
+      "status": "downloaded",
+      "cloud": "NOTE/Note/G/file00.note",
+      "local": "out/file00.note",
+      "size": 100
+    }
+  ],
+  "counts": {
+    "downloaded": 4
+  }
+}

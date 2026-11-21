@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "status": "cached",
+      "cloud": "DOCUMENT/Document/upload.pdf",
+      "local": "$ROOT/mirror/upload.pdf",
+      "size": 18
+    }
+  ],
+  "counts": {
+    "cached": 1
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "status": "create",
+      "cloud": "NOTE/Note/R",
+      "local": "",
+      "folder": true,
+      "size": 0
+    },
+    {
+      "status": "create",
+      "cloud": "NOTE/Note/R/sub",
+      "local": "",
+      "folder": true,
+      "size": 0
+    },
+    {
+      "status": "upload",
+      "cloud": "NOTE/Note/R/a.note",
+      "local": "backup/files/8-2c1743a391305fbf367df8e4f069f9f9.note",
+      "size": 5
+    },
+    {
+      "status": "upload",
+      "cloud": "NOTE/Note/R/sub/b.note",
+      "local": "backup/files/10-987bcab01b929eb2c07877b224215c92.note",
+      "size": 4
+    }
+  ],
+  "counts": {
+    "create": 2,
+    "upload": 2
+  },
+  "dry_run": true
+}

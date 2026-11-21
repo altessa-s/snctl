@@ -1,0 +1,5 @@
+FLAGS  PATH                               PAGES
+─────  ─────────────────────────────────  ─────
+H      DOCUMENT/Document/a.pdf            1
+H      DOCUMENT/Document/b.epub           1
+-      DOCUMENT/Document/orphan.pdf.mark  1

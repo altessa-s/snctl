@@ -1,0 +1,13 @@
+PATH                SIZE  FILES
+──────────────────  ────  ─────
+/                   10 B  2
+/DOCUMENT            0 B  0
+/DOCUMENT/Document   0 B  0
+/EXPORT              0 B  0
+/NOTE               10 B  2
+/NOTE/MyStyle        0 B  0
+/NOTE/Note          10 B  2
+
+used      10 B
+capacity  1.0 GiB
+recycled  0 B

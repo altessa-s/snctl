@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.altessa.snctl.mirror</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/My Apps/snctl</string>
+		<string>mirror</string>
+		<string>run</string>
+		<string>--service</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>SNCTL_CONFIG_DIR</key>
+		<string>/data/&lt;config&gt; &amp; 100%</string>
+		<key>SNCTL_PROFILE</key>
+		<string>work</string>
+		<key>SNCTL_SECRETS</key>
+		<string>file</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>StandardOutPath</key>
+	<string>/data/logs/mirror-service.out</string>
+	<key>StandardErrorPath</key>
+	<string>/data/logs/mirror-service.out</string>
+</dict>
+</plist>

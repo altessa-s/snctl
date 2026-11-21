@@ -1,0 +1,13 @@
+name	work
+endpoint	official
+backend	file
+backend_source	default
+config_file	/config/config.toml
+config_dir	/config/work
+cache_bytes	0
+cache_budget	unlimited
+cache_budget_source	-
+cache_dir	/cache/work
+token_path	/config/work/token.json
+exists	true
+current	true

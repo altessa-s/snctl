@@ -1,0 +1,19 @@
+name: Packaging CI
+# Packages every release target as the release does, without publishing. It
+# runs on git-flow release and hotfix branches, which are pushed before their
+# tag, and on demand; ordinary develop pushes skip its eight native builds.
+on:
+  push:
+    branches: ['release/**', 'hotfix/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    uses: ./.github/workflows/release-package.yml
+    with:
+      # Use a valid, deliberately synthetic version for archive/version smoke.
+      version: v0.0.0-ci
+      dry-run: true

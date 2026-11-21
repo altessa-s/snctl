@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "status": "upload",
+      "cloud": "Note/x.txt",
+      "local": "local.txt",
+      "size": 3
+    }
+  ],
+  "counts": {
+    "upload": 1
+  },
+  "dry_run": true
+}

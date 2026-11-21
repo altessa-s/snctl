@@ -1,0 +1,87 @@
+name: Homebrew
+
+# Dispatched after release-macos.sh uploads the signed macOS archives.
+# Formula hashes come from the published macOS and Linux archives.
+# The scoped tap token writes only to altessa-s/homebrew-tap.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The released tag, such as v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    name: Homebrew formula
+    if: ${{ !contains(inputs.tag, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Require the tap token
+        id: token
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -z "$TAP_TOKEN" ]]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN is not set; formulas are not published"
+            echo "set=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "set=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.token.outputs.set == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ format('refs/tags/{0}', inputs.tag) }}
+
+      - name: Download the archives
+        if: steps.token.outputs.set == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir artifacts \
+            --pattern 'snctl_*_darwin_*.zip' --pattern 'snctl_*_linux_*.tar.gz' \
+            --pattern 'snctl-lite_*_darwin_*.zip' --pattern 'snctl-lite_*_linux_*.tar.gz'
+
+      - name: Write the formulas
+        if: steps.token.outputs.set == 'true'
+        # homebrew-formula.sh fails when an archive is missing.
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          (cd artifacts && sha256sum snctl_* snctl-lite_* > checksums.txt && cat checksums.txt)
+          .github/scripts/homebrew-formula.sh "${TAG#v}" artifacts/checksums.txt > snctl.rb
+          .github/scripts/homebrew-formula.sh --lite "${TAG#v}" artifacts/checksums.txt > snctl-lite.rb
+          cat snctl.rb snctl-lite.rb
+
+      - name: Check out the tap
+        if: steps.token.outputs.set == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: altessa-s/homebrew-tap
+          path: tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Push them to the tap
+        if: steps.token.outputs.set == 'true'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir -p tap/Formula
+          cp snctl.rb snctl-lite.rb tap/Formula/
+          cd tap
+          git add Formula/snctl.rb Formula/snctl-lite.rb
+          if git diff --cached --quiet; then
+            echo "the formulas are already current"
+            exit 0
+          fi
+          git -c user.name=DM -c user.email=dm@altessa-s.com commit -m "feat(snctl): update to ${TAG#v}"
+          git push origin HEAD

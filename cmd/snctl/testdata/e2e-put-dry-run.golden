@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "status": "upload",
+      "cloud": "DOCUMENT/Document/one.pdf",
+      "local": "$ROOT/one.pdf",
+      "size": 3
+    },
+    {
+      "status": "upload",
+      "cloud": "DOCUMENT/Document/two.pdf",
+      "local": "$ROOT/two.pdf",
+      "size": 3
+    }
+  ],
+  "counts": {
+    "upload": 2
+  },
+  "dry_run": true
+}

@@ -1,0 +1,37 @@
+{
+  "name": "sample.mark",
+  "highlights": [
+    {
+      "text": "A quoted passage\nrect 99\t100\\end\r\n# heading ```",
+      "page": 1,
+      "color": 2,
+      "comment": "A useful passage",
+      "rects": [
+        null,
+        {
+          "x": 1,
+          "y": 2,
+          "width": 3,
+          "height": 4
+        }
+      ],
+      "document_rects": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 4,
+          "height": 0
+        }
+      ]
+    },
+    {
+      "text": "",
+      "page": 2,
+      "color": 0,
+      "comment": null,
+      "rects": [],
+      "document_rects": []
+    }
+  ]
+}
+warning: highlight text unavailable on page 2

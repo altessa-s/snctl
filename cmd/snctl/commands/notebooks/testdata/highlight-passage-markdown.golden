@@ -1,0 +1,15 @@
+## Page 1
+
+p.1  color 2  A useful passage
+
+    text: A quoted passage\nrect 99\t100\\end\r\n# heading ```
+
+rect 1 2 3 4
+document rect 0 0 4 0
+## Page 2
+
+p.2  color 0  
+
+    text: 
+
+warning: highlight text unavailable on page 2

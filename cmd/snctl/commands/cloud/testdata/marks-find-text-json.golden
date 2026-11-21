@@ -1,0 +1,74 @@
+[
+  {
+    "entry": {
+      "id": "4",
+      "name": "a.pdf",
+      "path": "DOCUMENT/Document/a.pdf",
+      "folder": false,
+      "size": 3,
+      "hash": "437175ba4191210ee004e1d937494d09",
+      "modified": "2023-11-14T22:13:23Z",
+      "recognition": null,
+      "mark": {
+        "id": "6",
+        "name": "a.pdf.mark",
+        "path": "DOCUMENT/Document/a.pdf.mark",
+        "folder": false,
+        "size": 4,
+        "hash": "ea82410c7a9991816b5eeeebe195e20a",
+        "modified": "2023-11-14T22:13:25Z",
+        "recognition": null
+      },
+      "flags": [
+        "highlights"
+      ]
+    },
+    "pages": [
+      1
+    ]
+  },
+  {
+    "entry": {
+      "id": "8",
+      "name": "b.epub",
+      "path": "DOCUMENT/Document/b.epub",
+      "folder": false,
+      "size": 4,
+      "hash": "e9353ce40eaa677f8c5d666c2f8bbb3f",
+      "modified": "2023-11-14T22:13:27Z",
+      "recognition": null,
+      "mark": {
+        "id": "10",
+        "name": "b.epub.mark",
+        "path": "DOCUMENT/Document/b.epub.mark",
+        "folder": false,
+        "size": 4,
+        "hash": "ea82410c7a9991816b5eeeebe195e20a",
+        "modified": "2023-11-14T22:13:29Z",
+        "recognition": null
+      },
+      "flags": [
+        "highlights"
+      ]
+    },
+    "pages": [
+      1
+    ]
+  },
+  {
+    "entry": {
+      "id": "12",
+      "name": "orphan.pdf.mark",
+      "path": "DOCUMENT/Document/orphan.pdf.mark",
+      "folder": false,
+      "size": 6,
+      "hash": "5c8ad194b0f0302f5a8a2c3bf502dcb2",
+      "modified": "2023-11-14T22:13:31Z",
+      "recognition": null,
+      "flags": []
+    },
+    "pages": [
+      1
+    ]
+  }
+]

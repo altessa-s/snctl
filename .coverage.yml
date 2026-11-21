@@ -1,0 +1,38 @@
+# rmctl's per-package floor; ports and test support have no behavior gate.
+# main and the system Keychain invocation are platform composition seams.
+threshold: 90.0
+packages:
+  - internal/app/archives
+  - internal/adapter/cache
+  - internal/app/prefetch
+  - internal/domain
+  - internal/app/profile
+  - internal/app/secrets
+  - internal/adapter/config
+  - internal/adapter/flock
+  - internal/adapter/fsdir
+  - internal/adapter/secretfile
+  - internal/adapter/keychain
+  - internal/adapter/vault
+  - internal/wiring
+  - cmd/snctl/commands
+  - cmd/snctl/commands/account
+  - cmd/snctl/commands/debug
+  - cmd/snctl/commands/version
+  - cmd/snctl/commands/output
+  - internal/app/files
+  - internal/app/outdir
+  - internal/app/notebooks
+  - internal/app/check
+  - internal/adapter/notes
+  - internal/adapter/renderer
+  - internal/adapter/opener
+  - internal/adapter/localfs
+  - internal/adapter/cloud
+  - cmd/snctl/commands/notebooks
+  - cmd/snctl/commands/cloud
+  - cmd/snctl/commands/cliutil
+  - internal/app/mirror
+  - internal/adapter/fswatch
+  - internal/adapter/autostart
+  - cmd/snctl/commands/mirror

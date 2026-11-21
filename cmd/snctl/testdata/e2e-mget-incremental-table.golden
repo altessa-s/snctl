@@ -1,0 +1,8 @@
+STATUS     CLOUD                        LOCAL                 SIZE  REASON
+─────────  ───────────────────────────  ───────────────────  ─────  ──────
+unchanged  NOTE/Note/G/a/b/file02.note  out/a/b/file02.note  102 B  -
+unchanged  NOTE/Note/G/a/file01.note    out/a/file01.note    101 B  -
+unchanged  NOTE/Note/G/dup.note         out/dup.note         100 B  -
+unchanged  NOTE/Note/G/file00.note      out/file00.note      100 B  -
+
+unchanged  4

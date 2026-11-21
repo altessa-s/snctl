@@ -1,0 +1,49 @@
+{
+  "folders": [
+    {
+      "path": "/",
+      "depth": 0,
+      "bytes": 10,
+      "files": 2
+    },
+    {
+      "path": "/DOCUMENT",
+      "depth": 1,
+      "bytes": 0,
+      "files": 0
+    },
+    {
+      "path": "/DOCUMENT/Document",
+      "depth": 2,
+      "bytes": 0,
+      "files": 0
+    },
+    {
+      "path": "/EXPORT",
+      "depth": 1,
+      "bytes": 0,
+      "files": 0
+    },
+    {
+      "path": "/NOTE",
+      "depth": 1,
+      "bytes": 10,
+      "files": 2
+    },
+    {
+      "path": "/NOTE/MyStyle",
+      "depth": 2,
+      "bytes": 0,
+      "files": 0
+    },
+    {
+      "path": "/NOTE/Note",
+      "depth": 2,
+      "bytes": 10,
+      "files": 2
+    }
+  ],
+  "recycled": 0,
+  "used": 10,
+  "capacity": 1073741824
+}

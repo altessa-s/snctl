@@ -1,0 +1,13 @@
+[
+  {
+    "id": "20",
+    "name": "folder",
+    "path": "Note/new",
+    "folder": true,
+    "size": null,
+    "hash": "",
+    "modified": null,
+    "recognition": null,
+    "flags": []
+  }
+]

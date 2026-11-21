@@ -1,0 +1,19 @@
+{
+  "folders": [
+    {
+      "path": "/",
+      "depth": 0,
+      "bytes": 3,
+      "files": 1
+    },
+    {
+      "path": "/Note",
+      "depth": 1,
+      "bytes": 3,
+      "files": 1
+    }
+  ],
+  "recycled": 0,
+  "used": 1,
+  "capacity": 1
+}

@@ -1,0 +1,36 @@
+{
+  "name": "sample.mark",
+  "highlights": [
+    {
+      "text": null,
+      "page": 1,
+      "color": 2,
+      "comment": "A useful passage",
+      "rects": [
+        null,
+        {
+          "x": 1,
+          "y": 2,
+          "width": 3,
+          "height": 4
+        }
+      ],
+      "document_rects": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 4,
+          "height": 0
+        }
+      ]
+    },
+    {
+      "text": null,
+      "page": 2,
+      "color": 0,
+      "comment": null,
+      "rects": [],
+      "document_rects": []
+    }
+  ]
+}

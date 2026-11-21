@@ -1,0 +1,8 @@
+name	drawing.spd
+kind	drawing
+canvas_width	256
+canvas_height	128
+layers	1
+tiles	3
+
+1	Ink	3

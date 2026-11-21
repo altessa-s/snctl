@@ -1,0 +1,25 @@
+{
+  "drawing": {
+    "width": 256,
+    "height": 128,
+    "format_version": "2",
+    "layers": [
+      {
+        "id": 1,
+        "name": "Ink",
+        "tiles": 3
+      }
+    ],
+    "tiles": 3
+  },
+  "name": "drawing.spd",
+  "kind": "drawing",
+  "format_version": 0,
+  "device": "",
+  "pages": [],
+  "titles": [],
+  "highlights": [],
+  "links": 0,
+  "keywords": 0,
+  "skipped_pages": 0
+}

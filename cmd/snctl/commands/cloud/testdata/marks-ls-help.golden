@@ -1,0 +1,32 @@
+List the entries in a tablet folder ("/" by default) on standard output.
+Names follow the device tree exactly, including NOTE/Note and
+DOCUMENT/Document. --ids adds the identifiers. No file is downloaded or
+changed.
+FLAGS shows R for recognized handwriting and H for a sibling .mark.
+Documents fold their full-name .mark sidecars; --marks keeps raw sidecars
+visible. --recognition reads unknown .note bodies through the cache, with
+progress; --offline uses cached bodies only.
+
+Usage:
+  snctl ls [path] [flags]
+
+Examples:
+snctl ls DOCUMENT/Document
+snctl ls NOTE/Note --ids --json
+
+Flags:
+  -h, --help[=true|false]          help for ls
+      --ids[=true|false]           show entry identifiers
+      --marks[=true|false]         show raw .mark files as separate entries
+      --recognition[=true|false]   read unknown .note bodies to discover recognized handwriting
+
+Global Flags:
+      --color string            color a table: auto, always or never (default "auto")
+      --format string           answer format: table, plain or json (or SNCTL_FORMAT; default: table on a terminal, plain otherwise)
+      --json[=true|false]       print answers as JSON (the same as --format json)
+      --no-cache[=true|false]   neither read nor write the cache on disk
+      --offline[=true|false]    read cached listings and bodies without any request
+  -P, --profile string          account profile (or SNCTL_PROFILE)
+      --quiet[=true|false]      hide progress lines
+  -v, --verbose[=true|false]    log what happens on standard error
+  -y, --yes[=true|false]        confirm a command that changes settings or cloud data

@@ -1,0 +1,8 @@
+{
+  "account": "reader@example.invalid",
+  "user": "Reader",
+  "cloud": "official",
+  "used": 1,
+  "total": 1,
+  "expiry": null
+}
