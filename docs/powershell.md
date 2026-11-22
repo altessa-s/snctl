@@ -4,9 +4,9 @@ Back to the [README](../README.md).
 
 These jobs target PowerShell 7.2 or later. Save the named scripts together in
 a directory such as `C:\Jobs\Supernote`. Run them from a PowerShell prompt
-before installing a shortcut or scheduled task. All scripts were syntax-checked
-with PowerShell 7.4.7. The snctl operations were exercised on a private-cloud
-bench. Explorer and Task Scheduler require a Windows session.
+before installing a shortcut or scheduled task. The scripts were run with
+PowerShell 7.4 on Windows 11 (arm64) against a private-cloud bench: from a
+prompt, from an Explorer Send To shortcut and from Task Scheduler.
 
 ## Contents
 
@@ -49,7 +49,9 @@ An existing local notebook path takes precedence when reading a notebook.
 The configuration lives in `%AppData%\snctl`, the cache in
 `%LocalAppData%\snctl`. Windows uses the file secret store. Run scheduled
 jobs under the user who logged in and protect that user's profile directory.
-Check native capabilities with `snctl version --full`.
+Check native capabilities with `snctl version --full`. Plain output escapes a
+backslash as `\\`, so a Windows path in a plain answer reads
+`C:\\Users\\you\\file.pdf`; take local paths from JSON, which decodes them.
 
 ## Ground rules and shared helpers
 
@@ -182,7 +184,10 @@ foreach ($item in $items) {
 Save **sn-backup.ps1**. In Task Scheduler choose **Create Basic Task**, set
 a daily trigger, select **Start a program** and enter the full path to
 `pwsh.exe`. Use arguments `-NoProfile -File "C:\Jobs\Supernote\sn-backup.ps1"`.
-Choose your logged-in user and run the task once. Check Last Run Result
+Choose your logged-in user. On a laptop, open the task's **Conditions** tab
+and clear **Start the task only if the computer is on AC power**: with it
+set, a task started on battery stays Queued and never runs. Run the task
+once. Check Last Run Result
 and the backup directory. Each run verifies local bytes and retains removed
 cloud files in `removed\`. See [backups](backups.md) for restore and pruning.
 

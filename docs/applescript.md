@@ -4,9 +4,10 @@ Back to the [README](../README.md).
 
 These macOS scripts send files from Finder and Mail and bring notebook content
 back to Preview, Notes or the clipboard. Install the helper once, then save
-the scripts you want in Script Editor. Each script was compiled with
-`osacompile`. The shared helper read a notebook page and previewed an upload
-on the private-cloud bench.
+the scripts you want in Script Editor. The scripts were run on macOS against
+a private-cloud bench, from Terminal, a LaunchAgent and a Folder Action, with
+their dialogs and Automation prompts answered by hand; the Mail script was
+compiled but not run.
 
 ## Contents
 
