@@ -14,7 +14,9 @@ a table and a pipe gets plain lines. Invalid output or color flags are rejected 
 any local mutation.
 
 Plain output uses tab-separated fields without headings for tables, `key<TAB>value`
-lines for records, and a terminating newline. JSON answers are indented and use stable
+lines for records, and a terminating newline. A TAB, line break or backslash
+inside a value is written as `\t`, `\n`, `\r` or `\\`, so each field stays on its
+line; a Windows path appears with doubled backslashes. JSON answers are indented and use stable
 snake_case field names, preserves integer precision and has a terminating
 newline. Empty collections are `[]`, not `null`. Table output uses display
 widths, so combining characters and wide names align.
