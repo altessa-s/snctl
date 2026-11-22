@@ -2,137 +2,256 @@
 
 Back to the [README](../README.md).
 
-The measuring, downloading and uploading answers below come from the built
-binary run against the fake private cloud the tests use
-(`internal/clouddouble`), in the `table` and `plain` formats; long reports are
-shortened with `…`. The terminal question and the last section show the shape
-of the answer with made-up files. A real account answers the same way with its
-own names, sizes and times.
+These transcripts come from a local Supernote Private Cloud with sanitized
+notebook and PDF fixtures. Commands with jq select a few fields from the full
+answer. Times and account totals depend on the library.
+
+## Browsing
+
+```console
+$ snctl ls DOCUMENT/Document/Reading --format table
+TYPE     SIZE  MODIFIED          FLAGS  NAME
+────  ───────  ────────────────  ─────  ─────────
+-     1.6 KiB  2026-11-22 11:11  H      Paper.pdf
+d           -  2026-11-22 11:13  -      Copy
+```
+
+```console
+$ snctl tree NOTE/Note/Work --format plain
+Journal.note
+```
+
+The H flag means the document has a full-name mark beside it. The legend
+goes to stderr. Use JSON to inspect the pair.
+
+```console
+$ snctl stat DOCUMENT/Document/Reading/Paper.pdf --json | jq '{path,flags,sidecar:.mark.path}'
+{
+  "path": "DOCUMENT/Document/Reading/Paper.pdf",
+  "flags": [
+    "highlights"
+  ],
+  "sidecar": "DOCUMENT/Document/Reading/Paper.pdf.mark"
+}
+```
+
+## Finding files and notebook text
+
+```console
+$ snctl find Journal NOTE/Note/Work --format table
+TYPE       SIZE  MODIFIED          FLAGS  NAME
+────  ─────────  ────────────────  ─────  ───────────────────────────
+-     372.3 KiB  2026-11-22 11:11  -      NOTE/Note/Work/Journal.note
+```
+
+The search reads stored recognition and typed text boxes. This notebook
+has typed text on page 1. The last plain field reports handwriting recognition.
+
+```console
+$ snctl find --text Проверка NOTE/Note/Work --format plain
+NOTE/Note/Work/Journal.note	1	no
+```
+
+```console
+$ snctl note NOTE/Note/Work/Journal.note --json | jq '{kind,device,format_version,pages:(.pages|length)}'
+{
+  "kind": "note",
+  "device": "N6",
+  "format_version": 20260016,
+  "pages": 2
+}
+```
+
+```console
+$ snctl text NOTE/Note/Work/Journal.note --page 1
+Проверка текстового блока
+Проверка текстового блока 2, другой размер
+Еще один текстовый блок
+```
+
+## Highlights
+
+```console
+$ snctl highlights DOCUMENT/Document/Reading/Paper.pdf --json | jq '[.highlights[] | {page,comment,text}]'
+[
+  {
+    "page": 1,
+    "comment": null,
+    "text": ""
+  },
+  {
+    "page": 1,
+    "comment": "Test comment",
+    "text": ""
+  },
+  {
+    "page": 1,
+    "comment": null,
+    "text": ""
+  }
+]
+```
+
+The PDF has no text under these rectangles. An empty string means the
+engine read the PDF. A null passage means text was unavailable. Markdown
+also retains the geometry and the comment.
+
+## Rendering
+
+```console
+$ snctl render NOTE/Note/Work/Journal.note -o Journal.pdf --json
+{
+  "path": "Journal.pdf",
+  "pages": 2,
+  "sheets_only": false,
+  "skipped_pages": 0
+}
+```
+
+```console
+$ snctl render NOTE/Note/Work/Journal.note --page 1 -o page.png --json
+{
+  "path": "page.png",
+  "pages": 1,
+  "sheets_only": false,
+  "skipped_pages": 0
+}
+```
 
 ## Measuring
 
 ```console
-$ snctl du / -d 2
-PATH                     SIZE  FILES
-──────────────────  ─────────  ─────
-/                   303.6 KiB  58
-/DOCUMENT           192.8 KiB  32
-/DOCUMENT/Document  192.8 KiB  32
-/EXPORT                   0 B  0
-/INBOX                    0 B  0
-/NOTE               110.8 KiB  26
-/NOTE/MyStyle             0 B  0
-/NOTE/Note          110.8 KiB  26
-/SCREENSHOT               0 B  0
+$ snctl du NOTE/Note/Work -d 1 --format table
+PATH                  SIZE  FILES
+───────────────  ─────────  ─────
+/NOTE/Note/Work  372.3 KiB  1
 
-used      303.6 KiB
-capacity  1.0 GiB
+used      413.4 KiB
+capacity  24.3 GiB
 recycled  0 B
-
-$ snctl dupes DOCUMENT/Document/Papers
-HASH                                  SIZE  PATH
-────────────────────────────────  ────────  ──────────────────────────────────────────
-7a0be5e9faf9eb9518def1802ba3a2e1  11.7 KiB  DOCUMENT/Document/Papers/attention (1).pdf
-7a0be5e9faf9eb9518def1802ba3a2e1  11.7 KiB  DOCUMENT/Document/Papers/attention.pdf
 ```
 
-## Downloading everything, then keeping it current
-
 ```console
-$ snctl mget / -o supernote -j 8
-STATUS      CLOUD                                       LOCAL                                                     SIZE  REASON
-──────────  ──────────────────────────────────────────  ────────────────────────────────────────────────────  ────────  ──────
-downloaded  DOCUMENT/Document/Books/novel.epub          supernote/DOCUMENT/Document/Books/novel.epub          17.6 KiB  -
-downloaded  DOCUMENT/Document/Papers/attention (1).pdf  supernote/DOCUMENT/Document/Papers/attention (1).pdf  11.7 KiB  -
-downloaded  DOCUMENT/Document/Papers/attention.pdf      supernote/DOCUMENT/Document/Papers/attention.pdf      11.7 KiB  -
-downloaded  NOTE/Note/Home/Ideas 14.note                supernote/NOTE/Note/Home/Ideas 14.note                  1000 B  -
-downloaded  NOTE/Note/Home/Journal 03.note              supernote/NOTE/Note/Home/Journal 03 (40).note             14 B  -
-…
-downloaded  NOTE/Note/Home/journal 03.note              supernote/NOTE/Note/Home/journal 03 (39).note             14 B  -
-…
-downloaded  NOTE/Note/Work/Sketch 08.note               supernote/NOTE/Note/Work/Sketch 08.note                2.3 KiB  -
-
-downloaded  30
+$ snctl dupes DOCUMENT/Document/Reading --format table
+HASH                                 SIZE  PATH
+────────────────────────────────  ───────  ────────────────────────────────────────
+3ba5cf7160e33fc89440df2326325ca7  1.6 KiB  DOCUMENT/Document/Reading/Copy/Paper.pdf
+3ba5cf7160e33fc89440df2326325ca7  1.6 KiB  DOCUMENT/Document/Reading/Paper.pdf
 ```
 
-`Journal 03.note` and `journal 03.note` would be one file on a file system
-that ignores case, so both carry their identifiers.
+## Downloading and uploading trees
 
 ```console
-$ snctl mget / -o supernote --incremental --format plain
-unchanged	DOCUMENT/Document/Books/novel.epub	supernote/DOCUMENT/Document/Books/novel.epub	18000	-
-…
-unchanged	NOTE/Note/Work/Sketch 08.note	supernote/NOTE/Note/Work/Sketch 08.note	2400	-
+$ snctl mget NOTE/Note/Work -o downloads --format table
+STATUS  CLOUD                        LOCAL                        SIZE  REASON
+──────  ───────────────────────────  ──────────────────────  ─────────  ──────
+cached  NOTE/Note/Work/Journal.note  downloads/Journal.note  372.3 KiB  -
 
-unchanged	30
+cached  1
 ```
 
-After `NOTE/Note/Work/Reading 07.note` was removed in the cloud:
-
 ```console
-$ snctl mget / -o supernote --incremental --delete
-STATUS     CLOUD                                       LOCAL                                                     SIZE  REASON
-─────────  ──────────────────────────────────────────  ────────────────────────────────────────────────────  ────────  ──────
-unchanged  DOCUMENT/Document/Books/novel.epub          supernote/DOCUMENT/Document/Books/novel.epub          17.6 KiB  -
-…
-unchanged  NOTE/Note/Work/Sketch 08.note               supernote/NOTE/Note/Work/Sketch 08.note                2.3 KiB  -
-deleted    -                                           supernote/NOTE/Note/Work/Reading 07.note               1.4 KiB  -
+$ snctl mget NOTE/Note/Work -o downloads --incremental --format plain
+unchanged	NOTE/Note/Work/Journal.note	downloads/Journal.note	381225	-
 
-unchanged  29
-deleted    1
+unchanged	1
 ```
 
-## Uploading a tree
+With `--delete`, mget removes previously recorded files that disappeared
+upstream, subject to its deletion guard. Locally edited or unrecorded files
+stay. Names that collide on a case-insensitive disk receive ID suffixes.
 
 ```console
-$ snctl mput supernote DOCUMENT/Document/Restore -j 4 --yes
-STATUS    CLOUD                                                                 LOCAL                                                     SIZE  REASON
-────────  ────────────────────────────────────────────────────────────────────  ────────────────────────────────────────────────────  ────────  ───────────
-created   DOCUMENT/Document/Restore/DOCUMENT                                    -                                                            -  -
-created   DOCUMENT/Document/Restore/DOCUMENT/Document                           -                                                            -  -
-…
-created   DOCUMENT/Document/Restore/NOTE/Note/Work/2026                         -                                                            -  -
-uploaded  DOCUMENT/Document/Restore/DOCUMENT/Document/Books/novel.epub          supernote/DOCUMENT/Document/Books/novel.epub          17.6 KiB  -
-…
-uploaded  DOCUMENT/Document/Restore/NOTE/Note/Work/Sketch 08.note               supernote/NOTE/Note/Work/Sketch 08.note                2.3 KiB  -
-skipped   -                                                                     supernote/.snctl-mget.json                                 0 B  hidden file
-
-uploaded  29
-created   12
-skipped   1
-
-$ snctl mput supernote DOCUMENT/Document/Restore --incremental --yes --json
+$ snctl mput downloads NOTE/Note/Work --incremental --yes --json | jq .counts
 {
-  "items": [
-    …
-  ],
-  "counts": {
-    "skipped": 1,
-    "unchanged": 29
-  }
+  "skipped": 1,
+  "unchanged": 1
 }
 ```
 
-Without `--yes` on a terminal, the plan is listed before the question:
+The skipped item is the hidden download record. To preview additions,
+point mput at another folder. A terminal displays the plan before asking
+for confirmation. A pipe needs `--yes` to apply it.
 
 ```console
-$ snctl mput ~/Papers DOCUMENT/Document/Papers
-  create   DOCUMENT/Document/Papers/2026
-  upload   DOCUMENT/Document/Papers/2026/attention.pdf
-  upload   DOCUMENT/Document/Papers/2026/bert.pdf
-Below DOCUMENT/Document/Papers: upload 2 files, create 1 folder (1.2 MiB)? [y/N]
+$ snctl mput downloads NOTE/Note/Work/Imported --dry-run --format plain
+create	NOTE/Note/Work/Imported	-	-	-
+upload	NOTE/Note/Work/Imported/Journal.note	downloads/Journal.note	381225	-
+skipped	-	downloads/.snctl-mget.json	0	hidden file
+
+upload	1
+create	1
+skipped	1
+```
+
+```console
+$ snctl mput downloads NOTE/Note/Work/Imported --yes --json | jq .counts
+{
+  "created": 1,
+  "skipped": 1,
+  "uploaded": 1
+}
 ```
 
 ## Single files and folders
 
+Start with three local PDFs. Upload two to `Filed` and fetch that folder
+once so mget records the local copies.
+
 ```console
-$ snctl put a.pdf b.epub --to DOCUMENT/Document --dry-run --format plain
-upload	DOCUMENT/Document/a.pdf	a.pdf	3	-
-upload	DOCUMENT/Document/b.epub	b.epub	3	-
+$ snctl mkdir -p DOCUMENT/Document/Reading/Filed --yes --format plain
+d	-	-	DOCUMENT/Document/Reading/Filed
+
+$ snctl put Review.pdf --to DOCUMENT/Document/Reading --yes --format plain
+-	1614	-	DOCUMENT/Document/Reading/Review.pdf
+
+$ snctl put Draft.pdf Report.pdf --to DOCUMENT/Document/Reading/Filed --dry-run --format plain
+upload	DOCUMENT/Document/Reading/Filed/Draft.pdf	Draft.pdf	431	-
+upload	DOCUMENT/Document/Reading/Filed/Report.pdf	Report.pdf	827	-
 
 upload	2
 
-$ snctl mkdir -p DOCUMENT/Document/Papers/2026/Q1 --yes
-$ snctl mv NOTE/Note/Plan.note NOTE/Note/Work --yes
-$ snctl rename NOTE/Note/Work/Plan.note "Plan 2026.note" --yes
+$ snctl put Draft.pdf Report.pdf --to DOCUMENT/Document/Reading/Filed --yes --format plain
+-	431	-	DOCUMENT/Document/Reading/Filed/Draft.pdf
+-	827	-	DOCUMENT/Document/Reading/Filed/Report.pdf
+
+$ snctl mget DOCUMENT/Document/Reading/Filed -o filed --format plain
+cached	DOCUMENT/Document/Reading/Filed/Draft.pdf	filed/Draft.pdf	431	-
+cached	DOCUMENT/Document/Reading/Filed/Report.pdf	filed/Report.pdf	827	-
+
+cached	2
 ```
+
+Move the review into `Filed`, rename it, then move the draft out. The next
+download uses the record to remove the local draft and keep the report.
+
+```console
+$ snctl mv DOCUMENT/Document/Reading/Review.pdf DOCUMENT/Document/Reading/Filed --yes --format plain
+moved to DOCUMENT/Document/Reading/Filed
+
+$ snctl rename DOCUMENT/Document/Reading/Filed/Review.pdf "First review.pdf" --yes --format plain
+moved to DOCUMENT/Document/Reading/Filed/First review.pdf
+
+$ snctl mv DOCUMENT/Document/Reading/Filed/Draft.pdf DOCUMENT/Document/Reading --yes --format plain
+moved to DOCUMENT/Document/Reading
+
+$ snctl mget DOCUMENT/Document/Reading/Filed -o filed --incremental --delete --format plain
+cached	DOCUMENT/Document/Reading/Filed/First review.pdf	filed/First review.pdf	1614	-
+unchanged	DOCUMENT/Document/Reading/Filed/Report.pdf	filed/Report.pdf	827	-
+deleted	-	filed/Draft.pdf	431	-
+
+cached	1
+unchanged	1
+deleted	1
+```
+
+## For scripts
+
+```console
+$ snctl ls DOCUMENT/Document/Reading --json | jq -r '.[] | select(.mark) | .path'
+DOCUMENT/Document/Reading/Paper.pdf
+```
+
+Use the returned tablet path as one quoted argument. Bulk uploads also
+accept individual files with `put --to`. For scheduling, exporting Markdown
+and reacting to changes, see [automation](automation.md).
