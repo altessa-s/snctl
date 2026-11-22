@@ -3,14 +3,21 @@
 A command-line client for the Supernote Cloud, built the way
 [rmctl](https://github.com/altessa-s/rmctl) is built.
 
-[Two-way mirrors](docs/mirror.md) keep local PDFs and EPUBs in step with the cloud and can run with your session.
-[Incremental backups](docs/backups.md) retain original Supernote files, and
-[watch execution](docs/watch.md) runs programs on batched changes.
-[Automation examples](docs/automation.md) cover nightly jobs and PDF rendering.
+snctl connects to the official Supernote Cloud and Ratta private clouds through
+[sncloud-go](https://github.com/altessa-s/sncloud-go).
 
-Cloud commands are available for official and Ratta private clouds through
-[sncloud-go](https://github.com/altessa-s/sncloud-go). Profiles, secret storage,
-migration and shell completion are also available. A [per-profile offline cache](docs/configuration.md#cache) supports TTL reads and `sync --files` for offline downloads and notebook rendering.
+## Features
+
+- [Browse and measure the library](docs/library.md), find duplicates and download folder trees.
+- [Upload files and folders](docs/uploads.md) with a preview and explicit replacement.
+- [Read notebooks and highlights](docs/notebooks.md), search stored handwriting recognition and export text.
+- [Render notebooks, annotated PDFs and Atelier drawings](docs/rendering.md) or open a preview.
+- [Mirror PDFs and EPUBs](docs/mirror.md) between the cloud and a local folder, including annotated output.
+- [Back up original files and restore them](docs/backups.md) to the same account or another profile.
+- [React to cloud changes](docs/watch.md) with a program that receives event batches.
+- [Work offline](docs/configuration.md#cache) with a listing and file bodies cached per profile.
+- Manage [to-do lists and tasks](#to-do-lists-and-tasks) and [digests](#digests) from the command line.
+- Schedule jobs with [Bash](docs/automation.md), [AppleScript](docs/applescript.md) or [PowerShell](docs/powershell.md).
 
 ## Install
 
@@ -143,7 +150,7 @@ An emailed challenge is sent automatically; enter the code at the prompt or
 supply `--code` in a noninteractive run.
 
 ```sh
-snctl -P work login --account reader@example.invalid
+snctl -P work login --account reader@example.com
 snctl -P work account --json
 snctl -P work logout
 ```
@@ -293,11 +300,7 @@ or interruption and refuses to delete a folder containing unexpected entries.
 Failures return a nonzero status and report retained folders. Results include
 one measured step per line; JSON emits one result object per step.
 
-[Architecture](docs/architecture.md), [configuration](docs/configuration.md),
-[output](docs/output.md), [library](docs/library.md), [uploads](docs/uploads.md),
-[examples](docs/examples.md), [mirrors](docs/mirror.md), [backups](docs/backups.md), [watch](docs/watch.md),
-[automation](docs/automation.md), [contributing](CONTRIBUTING.md),
-[security](SECURITY.md).
+See also [contributing](CONTRIBUTING.md) and [security](SECURITY.md).
 
 One rule, as in rmctl: every command that changes the cloud — creating,
 uploading, moving, renaming, recycling, restoring, deleting, emptying the
@@ -405,6 +408,27 @@ snspd-go for Atelier drawings and snrender-go for rendering.
 
 Brandon Philips’s supernote-typescript project contributed a test notebook.
 The [fixture notes](testdata/notebooks/README.md) document its origin and licence.
+
+## Documentation
+
+| Guide | What it covers |
+|---|---|
+| [Examples](docs/examples.md) | Commands and their answers on a sample library. |
+| [Configuration](docs/configuration.md) | Profiles, endpoints, secret stores and the offline cache. |
+| [Completion](docs/completion.md) | Shell setup and cached cloud path completion. |
+| [Output](docs/output.md) | Table, plain and JSON formats, confirmation and exit status. |
+| [Library](docs/library.md) | Tablet paths, folder downloads, space and duplicate reports. |
+| [Uploads](docs/uploads.md) | Upload plans, replacement, collisions and sync locking. |
+| [Notebooks](docs/notebooks.md) | Recognition, text search, inspection and highlights. |
+| [Rendering](docs/rendering.md) | PDF and image output, overlays, drawings and build requirements. |
+| [Mirrors](docs/mirror.md) | Two-way file sync, annotated copies and service installation. |
+| [Backups](docs/backups.md) | Incremental backups, retention and verified restoration. |
+| [Watch](docs/watch.md) | Change announcements, filters, batching and handler input. |
+| [Automation](docs/automation.md) | Bash jobs for backups, offline work, exports and reports. |
+| [AppleScript](docs/applescript.md) | Finder, Mail, Notes, Preview and scheduled jobs on macOS. |
+| [PowerShell](docs/powershell.md) | Windows scripts, Explorer integration and Task Scheduler. |
+| [Releases](docs/releases.md) | Full and lite archives, runtime libraries and release procedure. |
+| [Architecture](docs/architecture.md) | Package boundaries and implementation responsibilities. |
 
 ## License
 
