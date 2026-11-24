@@ -36,6 +36,8 @@ func (s Service) Mirror(ctx context.Context, query, dir string, o port.MirrorOpt
 	case s.Disk == nil:
 		return report, errNoDisk
 	}
+	ctx, flush := s.Recognition.Begin(ctx)
+	defer flush()
 	src, err := s.source(ctx, query)
 	if err != nil {
 		return report, err

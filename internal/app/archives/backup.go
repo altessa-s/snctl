@@ -31,6 +31,7 @@ const defaultJobs = 4
 
 // Service binds backup storage to the configured cloud and upload service.
 type Service struct {
+	Recognition       port.RecognitionOperation
 	Cloud             port.Files
 	Local             port.BackupLocal
 	Upload            port.BackupUploader
@@ -48,6 +49,8 @@ func (s Service) Backup(ctx context.Context, dir, query string, o port.BackupOpt
 	if o.All {
 		return r, fmt.Errorf("%w: --all is unavailable: the recycle-bin API has no original paths and complete MD5 metadata", port.ErrArgument)
 	}
+	ctx, flush := s.Recognition.Begin(ctx)
+	defer flush()
 	root, err := s.Local.OpenBackup(ctx, dir, true)
 	if err != nil {
 		return r, err

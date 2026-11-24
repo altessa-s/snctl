@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/altessa-s/snctl/internal/app/outdir"
 	"github.com/altessa-s/snctl/internal/domain"
@@ -59,14 +60,14 @@ func (s Service) ObserveBody(ctx context.Context, e port.Entry, file string) boo
 	n, err := s.parse(ctx, data)
 	// A scan retains even damaged verified notebook bodies under the normal budget,
 	// so later scans can retry parsing without downloading the same bytes again.
-	_, scanning := s.Index.(*recognitionBatch)
-	return scanning || err == nil && n.Kind == "note"
+	batch, batched := s.Index.(*recognitionBatch)
+	return batched && batch.scan || err == nil && n.Kind == "note"
 }
 
 // ObserveCached fills missing metadata for bodies retained by an earlier snctl version.
 func (s Service) ObserveCached(ctx context.Context, e port.Entry) {
 	cache, ok := s.Index.(port.FileCache)
-	if !ok || !recognizable(e) || s.Index.Recognition(e.Hash) != nil || s.Reader.Available() != nil {
+	if !ok || !recognizable(e) || port.ContextRecognitionIndex(ctx, s.Index).Recognition(e.Hash) != nil || s.Reader.Available() != nil {
 		return
 	}
 	file, found, err := cache.Body(ctx, e)
@@ -84,14 +85,10 @@ func recognizable(e port.Entry) bool {
 // Recognition decorates entries from the local index; scan reads only unknown notebooks.
 func (s Service) Recognition(ctx context.Context, entries []port.Entry, scan bool, progress port.Progress) (result []port.Entry, resultErr error) {
 	entries = slices.Clone(entries)
-	batch := &recognitionBatch{base: s.Index, values: map[string]bool{}, pending: map[string]bool{}}
-	if index, ok := s.Index.(port.RecognitionBatchIndex); ok {
-		batch.snapshot = true
-		maps.Copy(batch.values, index.RecognitionSnapshot())
-	}
+	batch := s.newRecognitionBatch(scan)
 	ctx = port.WithRecognitionIndex(ctx, batch)
 	if scan {
-		defer func() { _ = batch.flush(context.WithoutCancel(ctx)) }()
+		defer batch.flush(ctx)
 	}
 	for i := range entries {
 		if recognizable(entries[i]) {
@@ -129,11 +126,29 @@ func (s Service) Recognition(ctx context.Context, entries []port.Entry, scan boo
 	return entries, errors.Join(resultErr, ctx.Err())
 }
 
+// BatchRecognition shares a single index merge across readers and download observers.
+func (s Service) BatchRecognition(ctx context.Context) (context.Context, func()) {
+	if s.Index == nil || port.ContextRecognitionIndex(ctx, nil) != nil {
+		return ctx, func() {}
+	}
+	b := s.newRecognitionBatch(false)
+	return port.WithRecognitionIndex(ctx, b), func() { b.flush(ctx) }
+}
+
+func (s Service) newRecognitionBatch(scan bool) *recognitionBatch {
+	b := &recognitionBatch{base: s.Index, scan: scan, values: map[string]bool{}, pending: map[string]bool{}}
+	if index, ok := s.Index.(port.RecognitionBatchIndex); ok {
+		b.snapshot = true
+		maps.Copy(b.values, index.RecognitionSnapshot())
+	}
+	return b
+}
+
 // recognitionBatch also catches metadata observations made by Fetch.Read.
 // No notebook text is retained; flushing remains best effort, like body caching.
 type recognitionBatch struct {
 	mu              sync.Mutex
-	snapshot        bool
+	snapshot, scan  bool
 	base            port.RecognitionIndex
 	values, pending map[string]bool
 }
@@ -161,18 +176,27 @@ func (b *recognitionBatch) RememberRecognition(_ context.Context, hash string, v
 	return nil
 }
 
-func (b *recognitionBatch) flush(ctx context.Context) error {
+// Keep partial observations on cancellation, but bound the wait for a busy
+// cache lock. The next successful read can recreate any missing metadata.
+const recognitionFlushTimeout = 500 * time.Millisecond
+
+func (b *recognitionBatch) flush(ctx context.Context) {
+	if len(b.pending) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recognitionFlushTimeout)
+	defer cancel()
 	if index, ok := b.base.(port.RecognitionBatchIndex); ok {
-		return index.RememberRecognitions(ctx, b.pending)
+		_ = index.RememberRecognitions(ctx, b.pending)
+		return
 	}
 	if b.base != nil {
 		for hash, value := range b.pending {
 			if err := b.base.RememberRecognition(ctx, hash, value); err != nil {
-				return err
+				return
 			}
 		}
 	}
-	return nil
 }
 
 // FindText matches all whitespace-separated words across a notebook, ignoring case.
@@ -185,6 +209,8 @@ func (s Service) FindText(ctx context.Context, query, words string, progress por
 	if err := s.Reader.Available(); err != nil {
 		return nil, err
 	}
+	ctx, flush := s.BatchRecognition(ctx)
+	defer flush()
 	entries, local, err := s.textEntries(ctx, query)
 	if err != nil {
 		return nil, err
@@ -330,6 +356,8 @@ func (s Service) ExportText(ctx context.Context, query, dest string, o port.Text
 	if len(o.Pages) > 0 {
 		return nil, fmt.Errorf("%w: --page requires a notebook", port.ErrOptions)
 	}
+	ctx, flush := s.BatchRecognition(ctx)
+	defer flush()
 	entries, err := s.Cloud.List(ctx, query, true)
 	if err != nil {
 		return nil, err
@@ -366,25 +394,35 @@ func (s Service) ExportText(ctx context.Context, query, dest string, o port.Text
 	return outputs, ctx.Err()
 }
 
+// Destination returns dest unchanged for a file. An appended basename means
+// that same observation selected a directory, which must be pinned for writing.
+func (s *Service) bindDestination(dest, name string) (string, func(), error) {
+	target, err := s.Files.Destination(dest, name)
+	if err != nil || target == dest {
+		return target, func() {}, err
+	}
+	if dest == "" {
+		dest = "."
+	}
+	disk, err := outdir.Open(s.Files, dest)
+	if err != nil {
+		return "", nil, err
+	}
+	s.Files = disk
+	return target, func() { _ = disk.Close() }, nil
+}
+
 func (s Service) exportNotebookText(ctx context.Context, query, dest string, o port.TextOptions) ([]string, error) {
-	var err error
 	n, readErr := s.Read(ctx, query, o.Pages, o.Progress)
 	if readErr != nil {
 		return nil, readErr
 	}
 	name := safeName(strings.TrimSuffix(n.Name, path.Ext(n.Name))) + "." + o.Extension
-	target, destErr := s.Files.Destination(dest, name)
-	if destErr != nil {
-		return nil, destErr
+	target, closeOutput, err := s.bindDestination(dest, name)
+	if err != nil {
+		return nil, err
 	}
-	if s.Files.IsDir(dest) {
-		disk, openErr := outdir.Open(s.Files, dest)
-		if openErr != nil {
-			return nil, openErr
-		}
-		defer func() { _ = disk.Close() }()
-		s.Files = disk
-	}
+	defer closeOutput()
 	err = s.writeText(ctx, target, n, o)
 	if err != nil {
 		return nil, err

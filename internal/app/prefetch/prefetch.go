@@ -21,11 +21,12 @@ import (
 
 // Service fills the selected profile's cache after a live listing.
 type Service struct {
-	InitError error
-	Inspect   func(context.Context, port.Entry)
-	Cloud     port.Files
-	Cache     port.FileCache
-	Local     port.LocalFiles
+	Recognition port.RecognitionOperation
+	InitError   error
+	Inspect     func(context.Context, port.Entry)
+	Cloud       port.Files
+	Cache       port.FileCache
+	Local       port.LocalFiles
 }
 
 // Sync lists even when a previous complete sync covers the scope.
@@ -37,6 +38,8 @@ func (s Service) Sync(ctx context.Context, query string, opts port.SyncOptions) 
 	if s.Cache == nil {
 		return r, fmt.Errorf("%w: sync requires the cache; remove --no-cache", port.ErrArgument)
 	}
+	ctx, flush := s.Recognition.Begin(ctx)
+	defer flush()
 	entries, err := s.scope(ctx, r.Path)
 	if err != nil {
 		return r, err

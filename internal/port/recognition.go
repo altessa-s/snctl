@@ -28,6 +28,17 @@ type RecognitionBatchIndex interface {
 	RememberRecognitions(context.Context, map[string]bool) error
 }
 
+// RecognitionOperation scopes best-effort metadata writes to a multi-body operation.
+// The caller flushes after all workers have returned, including on cancellation.
+type RecognitionOperation func(context.Context) (context.Context, func())
+
+func (op RecognitionOperation) Begin(ctx context.Context) (context.Context, func()) {
+	if op == nil {
+		return ctx, func() {}
+	}
+	return op(ctx)
+}
+
 // WithRecognitionIndex gives body observers the same command-local batch as readers.
 func WithRecognitionIndex(ctx context.Context, index RecognitionIndex) context.Context {
 	return context.WithValue(ctx, recognitionIndexKey{}, index)

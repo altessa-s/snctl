@@ -39,6 +39,8 @@ func (s Service) RenderTree(ctx context.Context, query, dir string, o port.Rende
 	if err := s.Renderer.Available(); err != nil {
 		return port.TreeReport{}, err
 	}
+	ctx, flush := s.BatchRecognition(ctx)
+	defer flush()
 	top, err := s.Fetch.Resolve(ctx, query)
 	if err != nil {
 		return port.TreeReport{}, err

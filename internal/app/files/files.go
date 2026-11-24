@@ -18,11 +18,12 @@ import (
 // operation. Disk and Lock serve the folder transfers; without Lock a batch
 // runs without the account sync lock.
 type Service struct {
-	Account port.AccountReader
-	Cloud   port.Files
-	Local   port.LocalFiles
-	Disk    port.TreeFiles
-	Lock    port.SyncLock
+	Recognition port.RecognitionOperation
+	Account     port.AccountReader
+	Cloud       port.Files
+	Local       port.LocalFiles
+	Disk        port.TreeFiles
+	Lock        port.SyncLock
 }
 
 // Resolve finds an entry through canonical tablet paths.

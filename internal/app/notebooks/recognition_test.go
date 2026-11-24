@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/altessa-s/snctl/internal/adapter/localfs"
 	"github.com/altessa-s/snctl/internal/app/notebooks"
@@ -217,7 +218,8 @@ func TestTextExportFailures(t *testing.T) {
 
 type batchRecognitionCache struct {
 	recognitionCache
-	snapshots, merges, lookups int
+	snapshots, merges, lookups, singles int
+	flushBudget                         time.Duration
 }
 
 func (c *batchRecognitionCache) RecognitionSnapshot() map[string]bool { c.snapshots++; return c.values }
@@ -225,8 +227,15 @@ func (c *batchRecognitionCache) Recognition(hash string) *bool {
 	c.lookups++
 	return c.recognitionCache.Recognition(hash)
 }
+func (c *batchRecognitionCache) RememberRecognition(ctx context.Context, hash string, value bool) error {
+	c.singles++
+	return c.recognitionCache.RememberRecognition(ctx, hash, value)
+}
 func (c *batchRecognitionCache) RememberRecognitions(ctx context.Context, values map[string]bool) error {
 	c.merges++
+	if deadline, ok := ctx.Deadline(); ok {
+		c.flushBudget = time.Until(deadline)
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -281,7 +290,7 @@ func TestRecognitionPartialResultsAndBatchFlush(t *testing.T) {
 			} else if !errors.Is(err, port.ErrNotebook) || got[2].Recognition == nil {
 				t.Fatal(got, err)
 			}
-			if cache.snapshots != 1 || cache.merges != 1 || cache.lookups != 0 || !cache.values["good"] {
+			if cache.snapshots != 1 || cache.merges != 1 || cache.lookups != 0 || cache.flushBudget <= 0 || cache.flushBudget > time.Second || !cache.values["good"] {
 				t.Fatal(cache)
 			}
 		})
@@ -427,5 +436,69 @@ func TestFindTextUnicodeNormalization(t *testing.T) {
 		if err != nil || len(found) != 1 || len(found[0].Pages) != 2 {
 			t.Fatal(found, err)
 		}
+	}
+}
+
+func TestMultiBodyRecognitionWritesOnce(t *testing.T) {
+	entries := []port.Entry{
+		{ID: "1", Name: "a.note", Path: "Top/a.note"},
+		{ID: "2", Name: "b.note", Path: "Top/b.note"},
+		{ID: "3", Name: "c.note", Path: "Top/c.note"},
+	}
+	for _, operation := range []string{"find", "export", "cancel", "error"} {
+		t.Run(operation, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			cache := &batchRecognitionCache{}
+			s := textExportService(entries, true)
+			s.Index = cache
+			var err error
+			if operation == "find" {
+				_, err = s.FindText(ctx, "/", "synthetic", nil, false)
+			} else {
+				o := textExportOptions()
+				if operation == "cancel" || operation == "error" {
+					o.Encode = func(port.Notebook) ([]byte, error) {
+						if operation == "cancel" {
+							cancel()
+							return nil, ctx.Err()
+						}
+						return nil, fs.ErrPermission
+					}
+				}
+				_, err = s.ExportText(ctx, "Top", t.TempDir(), o)
+			}
+			want := len(entries)
+			if operation == "cancel" || operation == "error" {
+				want = 1
+			}
+			if (err != nil) != (want == 1) || cache.singles != 0 || cache.merges != 1 || cache.flushBudget <= 0 || cache.flushBudget > time.Second || len(cache.values) != want || cache.lookups != 0 {
+				t.Fatal("operation did not flush collected bodies", err, cache)
+			}
+		})
+	}
+}
+
+func TestDownloadObserverBatchesWithReaders(t *testing.T) {
+	s, disk := setup()
+	cache := &batchRecognitionCache{}
+	s.Index = cache
+	s.Reader = porttest.NoteReader{Notebook: port.Notebook{Kind: "note"}}
+	ctx, flush := s.BatchRecognition(t.Context())
+	for _, name := range []string{"one.note", "two.note", "three.note"} {
+		disk.Data[name] = []byte(name)
+		if !s.ObserveBody(ctx, port.Entry{Name: name}, name) {
+			t.Fatal("readable download was not observed", name)
+		}
+		if _, err := s.Read(ctx, name, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if cache.merges != 0 || len(cache.values) != 0 {
+		t.Fatal("writes escaped operation batch", cache)
+	}
+	flush()
+	if cache.merges != 1 || len(cache.values) != 3 {
+		t.Fatal("observer and reader writes were not merged", cache)
 	}
 }
