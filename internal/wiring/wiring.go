@@ -150,17 +150,21 @@ func Build(ctx context.Context, opts Options) (Services, error) {
 	}
 	noteService := notebooks.Service{Index: recognitionIndex, Fetch: fetch, Cloud: client, Files: localfs.Files{}, Reader: notes.Reader{},
 		Renderer: renderer.Renderer{}, Opener: opener.New()}
+	fetch.Recognition = noteService.BatchRecognition
 	client.SetBodyObserver(noteService.ObserveBody)
 	engine := mirror.NewEngine(mirror.Deps{Cloud: client, Upload: fetch, Library: fetch, Files: localfs.Files{}, Disk: localfs.Files{}, Notes: noteService,
 		Feed: client, Dirs: fswatch.New(), Timer: mirrorTimer{}, Lock: client, Profile: cfg.Profile,
-		Connections: mirrorConnections{client: client, note: noteService}})
+		LibraryVersions: notes.LibraryVersion + "/" + renderer.LibraryVersion,
+		Connections:     mirrorConnections{client: client, note: noteService}})
 	return Services{
 		Mirrors: mirror.NewService(mirrorConfig{writer: config.Writer{Path: cfg.ConfigFile, Read: opts.Read, Env: opts.Env}},
 			engines{opts: opts, profile: cfg.Profile, own: engine}, localfs.Files{}, localfs.Files{}, mirrorTimer{}),
 		MirrorEngine: engine, MirrorService: mirrorService(cfg, opts, mirrorTimer{}),
-		Backups: archives.Service{Cloud: client, Local: localfs.Files{}, Upload: fetch, Profile: cfg.Profile, Endpoint: cfg.Endpoint, Now: clock.Real().Now},
+		Backups: archives.Service{Recognition: noteService.BatchRecognition, Cloud: client, Local: localfs.Files{}, Upload: fetch,
+			Profile: cfg.Profile, Endpoint: cfg.Endpoint, Now: clock.Real().Now},
 		Offline: cfg.Offline, Cache: cacheAdmin{store: store},
-		Syncer:     prefetch.Service{Inspect: noteService.ObserveCached, InitError: cacheFailure, Cloud: client, Cache: diskCache, Local: localfs.Files{}},
+		Syncer: prefetch.Service{Recognition: noteService.BatchRecognition, Inspect: noteService.ObserveCached,
+			InitError: cacheFailure, Cloud: client, Cache: diskCache, Local: localfs.Files{}},
 		Completion: completion, Fetch: fetch, Notebooks: noteService,
 		Session: client, Files: client, Tasks: client, Digests: client, Feed: client,
 		Check: check.Service{Session: client, Files: client, Tasks: client, Digests: client, Feed: client,

@@ -8,12 +8,16 @@
 package notes
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/altessa-s/snctl/internal/port"
 
 	snnote "github.com/altessa-s/snnote-go"
 )
+
+// LibraryVersion identifies the linked library for mirror rejection records.
+const LibraryVersion = snnote.Version
 
 // Reader owns no native state: Parse copies every value before returning.
 type Reader struct{}
@@ -25,7 +29,7 @@ func (Reader) Available() error { return nil }
 func (Reader) Parse(data []byte) (port.Notebook, error) {
 	n, err := snnote.Parse(data)
 	if err != nil {
-		return port.Notebook{}, fmt.Errorf("%w: %w", port.ErrNotebook, err)
+		return port.Notebook{}, notebookParseError(err)
 	}
 	out := port.Notebook{Kind: n.Kind.String(), Version: n.FormatVersion, Device: n.EquipmentRaw,
 		Links: len(n.Links), Keywords: len(n.Keywords), SkippedPages: n.SkippedPages,
@@ -57,6 +61,26 @@ func (Reader) Parse(data []byte) (port.Notebook, error) {
 	}
 	return out, nil
 }
+
+func notebookParseError(err error) error {
+	class := port.ErrNotebook
+	if failure, ok := errors.AsType[*snnote.Error](err); ok {
+		switch failure.Status {
+		case snnote.StatusOK, snnote.StatusInvalidArgument, snnote.StatusOutOfMemory:
+			// These statuses do not identify damaged content.
+		case snnote.StatusUnsupportedFormat, snnote.StatusUnexpectedEOF, snnote.StatusMalformed, snnote.StatusImageEncoding, snnote.StatusUnsupportedEncoding:
+			class = port.ErrNotebookContent
+		case snnote.StatusLimit:
+			// The native parse budget is derived from the verified input. The Go
+			// model-copy budget also accounts for architecture-specific struct sizes.
+			if failure.Message == "parse work budget exceeded" || failure.Message == "parse allocation budget exceeded" {
+				class = port.ErrNotebookContent
+			}
+		}
+	}
+	return fmt.Errorf("%w: %w", class, err)
+}
+
 func value(s *string) string {
 	if s == nil {
 		return ""

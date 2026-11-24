@@ -20,35 +20,37 @@ import (
 
 // Engine reconciles the journal with fresh cloud entries and confined local files.
 type Engine struct {
-	connections port.MirrorConnections
-	fresh       bool
-	cloud       port.Files
-	upload      port.BackupUploader
-	library     port.Library
-	files       port.TreeFiles
-	disk        port.MirrorDisk
-	notes       port.Notebooks
-	feed        port.Feed
-	dirs        port.DirWatcher
-	timer       port.Timer
-	lock        port.SyncLock
-	profile     string
+	connections     port.MirrorConnections
+	fresh           bool
+	cloud           port.Files
+	upload          port.BackupUploader
+	library         port.Library
+	files           port.TreeFiles
+	disk            port.MirrorDisk
+	notes           port.Notebooks
+	feed            port.Feed
+	dirs            port.DirWatcher
+	timer           port.Timer
+	lock            port.SyncLock
+	libraryVersions string
+	profile         string
 }
 
 // Deps supplies one profile's mirror capabilities.
 type Deps struct {
-	Connections port.MirrorConnections
-	Cloud       port.Files
-	Upload      port.BackupUploader
-	Library     port.Library
-	Files       port.TreeFiles
-	Disk        port.MirrorDisk
-	Notes       port.Notebooks
-	Feed        port.Feed
-	Dirs        port.DirWatcher
-	Timer       port.Timer
-	Lock        port.SyncLock
-	Profile     string
+	Connections     port.MirrorConnections
+	Cloud           port.Files
+	Upload          port.BackupUploader
+	Library         port.Library
+	Files           port.TreeFiles
+	Disk            port.MirrorDisk
+	Notes           port.Notebooks
+	Feed            port.Feed
+	Dirs            port.DirWatcher
+	Timer           port.Timer
+	Lock            port.SyncLock
+	LibraryVersions string
+	Profile         string
 }
 
 // NewEngine constructs the engine without contacting the cloud.
@@ -58,7 +60,7 @@ func NewEngine(d Deps) *Engine {
 		dependency{"Feed", d.Feed == nil}, dependency{"Dirs", d.Dirs == nil}, dependency{depTimer, d.Timer == nil},
 		dependency{"Lock", d.Lock == nil})
 	return &Engine{connections: d.Connections, cloud: d.Cloud, upload: d.Upload, library: d.Library, files: d.Files, disk: d.Disk, notes: d.Notes,
-		feed: d.Feed, dirs: d.Dirs, timer: d.Timer, lock: d.Lock, profile: d.Profile}
+		feed: d.Feed, dirs: d.Dirs, timer: d.Timer, lock: d.Lock, profile: d.Profile, libraryVersions: d.LibraryVersions}
 }
 
 type dependency struct {
@@ -148,6 +150,13 @@ func (e *Engine) pass(ctx context.Context, spec port.MirrorSpec, o port.MirrorRu
 		r.e = &freshEngine
 	}
 
+	if notes, ok := r.e.notes.(interface {
+		BatchRecognition(context.Context) (context.Context, func())
+	}); ok {
+		var flush func()
+		ctx, flush = notes.BatchRecognition(ctx)
+		defer flush()
+	}
 	if batch, ok := r.e.library.(port.FileWriteBatch); ok && !o.DryRun {
 		err = batch.WithWriteBatch(ctx, r.reconcile)
 	} else {
@@ -298,7 +307,7 @@ func (r *run) relative(c port.Entry) string {
 func (r *run) guard() {
 	up, down := 0, 0
 	for id, en := range r.j.Items {
-		if en.Detached {
+		if !en.countsForDeletion() {
 			continue
 		}
 		_, remote := r.docs[id]
@@ -347,9 +356,10 @@ func (r *run) findRename(en entry) (*localFile, bool) {
 }
 func (r *run) deletion(id string, en entry, down bool) bool {
 	if r.spec.NoDelete {
-		en.Detached = true
 		if !r.opts.DryRun {
-			r.j.Items[id] = en
+			current := r.j.Items[id]
+			current.Detached = true
+			r.j.Items[id] = current
 		}
 		r.record(port.MirrorAction{Kind: port.MirrorDetach, Path: en.Path, Document: id, Detail: "--no-delete keeps the other copy"})
 		return false
@@ -441,13 +451,20 @@ func (r *run) finish(ctx context.Context, err error) port.MirrorPass {
 	return r.pass
 }
 
+// Drawing I/O failures are local to a drawing. Journal failures alone stop the pass.
+func (r *run) writeJournal(ctx context.Context) error {
+	err := r.j.write(ctx, r.root)
+	if err != nil {
+		r.failure = err
+	}
+	return err
+}
+
 func (r *run) checkpoint(ctx context.Context) {
 	if r.opts.DryRun || r.e.timer.Now().Sub(r.saved) < checkpointEvery {
 		return
 	}
-	if err := r.j.write(ctx, r.root); err != nil {
-		r.failure = err
-	}
+	_ = r.writeJournal(ctx)
 	r.saved = r.e.timer.Now()
 }
 

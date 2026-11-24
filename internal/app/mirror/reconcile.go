@@ -22,20 +22,24 @@ import (
 
 func (r *run) tracked(ctx context.Context, id string) {
 	en := r.j.Items[id]
-	if en.Detached {
-		return
-	}
-	if en.Path != "" && r.drawingPending(id, "") {
-		r.record(port.MirrorAction{Kind: port.MirrorSkip, Path: en.Path, Document: id, Detail: "drawing publication awaits recovery"})
-		return
-	}
 	c, remote := r.docs[id]
+	if en.Detached && (remote || en.ownsLocalOutput()) {
+		return
+	}
 	f, local := r.local.find(en.Path)
 	if local {
 		r.claimed[f.Path] = true
 	}
 	if en.Recover {
 		r.recoverUpload(ctx, id, en, f, local)
+		return
+	}
+	if en.drawingOnlyDocument() {
+		if !remote {
+			r.finishOriginal(ctx, id, en)
+		}
+		// A restored ID has a new original. Let newFiles/newCloud reconcile
+		// the released path after the remaining owners have been processed.
 		return
 	}
 	if en.Path == "" {
@@ -55,13 +59,7 @@ func (r *run) tracked(ctx context.Context, id string) {
 	}
 	switch {
 	case !local && !remote:
-		if en.Output != "" {
-			r.remove(ctx, id, en, en.Output)
-			return
-		}
-		if !r.opts.DryRun {
-			delete(r.j.Items, id)
-		}
+		r.finishOriginal(ctx, id, en)
 	case !remote:
 		if r.deletion(id, en, true) {
 			r.remove(ctx, id, en, f.Path)
@@ -77,6 +75,26 @@ func (r *run) tracked(ctx context.Context, id string) {
 			return
 		}
 		r.changed(ctx, id, en, c, f)
+	}
+}
+
+// A deleted original releases its path immediately. A pending drawing keeps
+// its journal owner until recovery can finish and the output can be retained.
+func (r *run) forgetOriginal(id string) {
+	if r.drawingPending(id, "") {
+		en := r.j.Items[id]
+		en.Path, en.Recover, en.RestoreLocal = "", false, false
+		r.j.Items[id] = en
+		return
+	}
+	delete(r.j.Items, id)
+}
+
+func (r *run) finishOriginal(ctx context.Context, id string, en entry) {
+	if en.Output != "" && !r.drawingPending(id, "") {
+		r.remove(ctx, id, en, en.Output)
+	} else if !r.opts.DryRun {
+		r.forgetOriginal(id)
 	}
 }
 
@@ -106,12 +124,10 @@ func (r *run) align(ctx context.Context, id string, en *entry, c *port.Entry, f 
 				delete(r.cloudPaths, foldName(r.relative(*c)))
 				c.Path, c.Name = target, path.Base(target)
 				r.docs[id], r.cloudPaths[foldName(f.Path)] = *c, *c
-				en.Path, en.CloudPath = f.Path, c.Path
-				r.j.Items[id] = *en
-				a.Err = r.j.write(ctx, r.root)
-				if a.Err != nil {
-					r.failure = a.Err
-				}
+				current := r.j.Items[id]
+				current.Path, current.CloudPath = f.Path, c.Path
+				r.j.Items[id] = current
+				a.Err = r.writeJournal(ctx)
 			}
 		}
 		r.record(a)
@@ -158,7 +174,7 @@ func (r *run) changed(ctx context.Context, id string, en entry, c port.Entry, f 
 	case localChanged && cloudChanged:
 		r.conflict(ctx, id, en, c, f)
 	case localChanged:
-		r.uploadAction(ctx, f, c.Path, &c)
+		r.uploadAction(ctx, f, c.Path, id, &c)
 	case cloudChanged:
 		r.downloadAction(ctx, c, f.Path, "")
 	default:
@@ -198,7 +214,7 @@ func (r *run) newFiles(ctx context.Context) {
 		}
 		c, exists := r.cloudPaths[foldName(p)]
 		if exists {
-			if _, tracked := r.j.Items[c.ID]; tracked {
+			if en, tracked := r.j.Items[c.ID]; tracked && (en.Detached || !en.drawingOnlyDocument()) {
 				continue
 			}
 			if strings.EqualFold(f.md5, c.Hash) {
@@ -208,7 +224,7 @@ func (r *run) newFiles(ctx context.Context) {
 				r.conflict(ctx, c.ID, entry{}, c, f)
 			}
 		} else {
-			r.uploadAction(ctx, f, path.Join(strings.Trim(r.spec.Folder, "/"), p), nil)
+			r.uploadAction(ctx, f, path.Join(strings.Trim(r.spec.Folder, "/"), p), "", nil)
 		}
 	}
 }
@@ -221,7 +237,7 @@ func (r *run) newCloud(ctx context.Context) {
 		if ctx.Err() != nil || r.failure != nil {
 			return
 		}
-		if _, known := r.j.Items[id]; known {
+		if en, known := r.j.Items[id]; known && (en.Detached || !en.drawingOnlyDocument()) {
 			continue
 		}
 		c := r.docs[id]
@@ -254,11 +270,11 @@ func (r *run) trash(ctx context.Context, id string, en entry, c port.Entry) {
 			if errors.Is(a.Err, port.ErrConflict) {
 				a.Detail = a.Err.Error() + "; cloud entry changed before trash; next pass will re-plan"
 			}
-			if a.Err == nil && en.Output != "" {
+			if a.Err == nil && en.Output != "" && !r.drawingPending(id, "") {
 				_, a.Err = r.aside(en.Output)
 			}
 			if a.Err == nil {
-				delete(r.j.Items, id)
+				r.forgetOriginal(id)
 				delete(r.docs, id)
 				delete(r.cloudPaths, foldName(r.relative(c)))
 			}
@@ -270,14 +286,15 @@ func (r *run) remove(_ context.Context, id string, en entry, rel string) {
 	a := port.MirrorAction{Kind: port.MirrorRemove, Path: rel, Document: id}
 	if !r.opts.DryRun {
 		a.To, a.Err = r.aside(rel)
-		if a.Err == nil && en.Output != "" && en.Output != rel {
+		pending := r.drawingPending(id, "")
+		if a.Err == nil && !pending && en.Output != "" && en.Output != rel {
 			_, a.Err = r.aside(en.Output)
 		}
-		if a.Err == nil && en.Text {
+		if a.Err == nil && !pending && en.Text {
 			_, a.Err = r.aside(drawingTextPath(en.Output))
 		}
 		if a.Err == nil {
-			delete(r.j.Items, id)
+			r.forgetOriginal(id)
 		}
 	}
 	r.record(a)
@@ -315,8 +332,8 @@ func (r *run) recoverUpload(ctx context.Context, id string, en entry, f *localFi
 	}
 	c, exists := r.cloudPaths[foldName(strings.TrimPrefix(en.CloudPath, strings.Trim(r.spec.Folder, "/")+"/"))]
 	if exists && strings.EqualFold(c.Hash, f.md5) {
-		if !r.opts.DryRun {
-			delete(r.j.Items, id)
+		if !r.opts.DryRun && c.ID != id {
+			r.replaceOriginal(id, c.ID)
 		}
 		r.inStep(c.ID, f, c)
 		r.record(port.MirrorAction{Kind: port.MirrorAdopt, Path: f.Path, Document: c.ID, Detail: "resumed replacement"})
@@ -328,8 +345,9 @@ func (r *run) recoverUpload(ctx context.Context, id string, en entry, f *localFi
 	}
 	if exists && !strings.EqualFold(c.Hash, en.Record) {
 		if !r.opts.DryRun {
-			en.Recover = false
-			r.j.Items[id] = en
+			current := r.j.Items[id]
+			current.Recover = false
+			r.j.Items[id] = current
 		}
 		r.conflict(ctx, id, en, c, f)
 		return
@@ -338,21 +356,15 @@ func (r *run) recoverUpload(ctx context.Context, id string, en entry, f *localFi
 	if exists {
 		previous = &c
 	}
-	r.uploadAction(ctx, f, en.CloudPath, previous)
-	if !r.opts.DryRun && r.pass.Actions[len(r.pass.Actions)-1].Err == nil && r.pass.Actions[len(r.pass.Actions)-1].Document != id {
-		delete(r.j.Items, id)
-	}
+	r.uploadAction(ctx, f, en.CloudPath, id, previous)
 }
 
-func (r *run) uploadAction(ctx context.Context, f *localFile, target string, previous *port.Entry) {
+func (r *run) uploadAction(ctx context.Context, f *localFile, target, id string, previous *port.Entry) {
 	kind := port.MirrorUpload
 	if previous != nil {
 		kind = port.MirrorUpdate
 	}
-	a := port.MirrorAction{Kind: kind, Path: f.Path}
-	if previous != nil {
-		a.Document = previous.ID
-	}
+	a := port.MirrorAction{Kind: kind, Path: f.Path, Document: id}
 	if !r.opts.DryRun {
 		a.Err = r.upload(ctx, f, target, previous, &a)
 	}
@@ -384,7 +396,7 @@ func (r *run) upload(ctx context.Context, f *localFile, target string, previous 
 		en := r.j.Items[previous.ID]
 		en.Path, en.CloudPath, en.Recover = f.Path, previous.Path, true
 		r.j.Items[previous.ID] = en
-		if err = r.j.write(ctx, r.root); err != nil {
+		if err = r.writeJournal(ctx); err != nil {
 			return err
 		}
 		lookup := r.e.cloud.Stat
@@ -416,12 +428,8 @@ func (r *run) upload(ctx context.Context, f *localFile, target string, previous 
 		if c.Path != target || !strings.EqualFold(c.Hash, f.md5) {
 			return fmt.Errorf("uploaded copy retained at %s; destination did not verify", c.Path)
 		}
+		r.replaceOriginal(a.Document, c.ID)
 		if previous != nil {
-			prior := r.j.Items[previous.ID]
-			r.j.Items[c.ID] = prior
-			if c.ID != previous.ID {
-				delete(r.j.Items, previous.ID)
-			}
 			delete(r.docs, previous.ID)
 			a.Detail = "replaced in place"
 			if c.ID != previous.ID {
@@ -434,6 +442,28 @@ func (r *run) upload(ctx context.Context, f *localFile, target string, previous 
 		return nil
 	}
 	return errors.New("upload returned no verified entry")
+}
+
+// An in-place update keeps its drawing. A new ID can inherit the old entry
+// only when recovery no longer needs the old drawing owner.
+func (r *run) replaceOriginal(oldID, newID string) {
+	if oldID == "" || oldID == newID {
+		return
+	}
+	if r.drawingPending(oldID, "") {
+		r.forgetOriginal(oldID)
+		return
+	}
+	old := r.j.Items[oldID]
+	if r.drawingPending(newID, "") || r.j.Items[newID].Output != "" {
+		// A recovered destination may already own an independent drawing.
+		// Release the old original path and retire its drawing normally.
+		old.Path, old.Recover, old.RestoreLocal = "", false, false
+		r.j.Items[oldID] = old
+		return
+	}
+	r.j.Items[newID] = old
+	delete(r.j.Items, oldID)
 }
 
 func (r *run) downloadAction(ctx context.Context, c port.Entry, rel, detail string) {
@@ -478,7 +508,7 @@ func (r *run) download(ctx context.Context, c port.Entry, rel string) error {
 	en := r.j.Items[c.ID]
 	en.Path, en.CloudPath, en.Record, en.RestoreLocal = rel, c.Path, c.Hash, true
 	r.j.Items[c.ID] = en
-	if err = r.j.write(ctx, r.root); err != nil {
+	if err = r.writeJournal(ctx); err != nil {
 		return err
 	}
 	if current.Exists {

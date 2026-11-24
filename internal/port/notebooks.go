@@ -17,9 +17,11 @@ var (
 	ErrNotebookUnavailable = errors.New("this build cannot read notebooks: rebuild with cgo and a C23 compiler")
 	ErrRenderUnavailable   = errors.New("this build cannot render notebooks: install a full build with cgo and without norender")
 	ErrNotebook            = errors.New("not a readable Supernote notebook")
-	ErrPage                = errors.New("page out of range")
-	ErrOptions             = errors.New("invalid notebook options")
-	ErrFileRequired        = errors.New("get requires a file, not a folder")
+	// ErrNotebookContent identifies a parser rejection of the input bytes.
+	ErrNotebookContent = fmt.Errorf("%w: content parse failure", ErrNotebook)
+	ErrPage            = errors.New("page out of range")
+	ErrOptions         = errors.New("invalid notebook options")
+	ErrFileRequired    = errors.New("get requires a file, not a folder")
 )
 
 // Fetch shares cloud resolution and verified downloads among file consumers.

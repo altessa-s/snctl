@@ -40,7 +40,7 @@ func (r *run) notebook(ctx context.Context, id string, en entry, c port.Entry, r
 	rel := r.relative(c)
 	out := domain.MirrorAnnotatedPath(path.Join("notebooks", rel), "pdf")
 	if en.Drawn == c.Hash && en.Output == out {
-		if en.TextChecked {
+		if en.TextChecked || r.rejectedDrawing(c, en, c.Hash, textCheck) {
 			return
 		}
 		r.addDrawingText(ctx, c, en)
@@ -54,9 +54,10 @@ func (r *run) addDrawingText(ctx context.Context, c port.Entry, en entry) {
 	a := port.MirrorAction{Kind: port.MirrorDraw, Path: r.relative(c), To: drawingTextPath(en.Output), Document: c.ID,
 		Detail: "check recognized text for current drawing"}
 	if !r.opts.DryRun {
-		n, err := r.e.notes.Read(ctx, "/"+strings.TrimPrefix(c.Path, "/"), nil, nil)
+		n, err := r.readDrawingText(ctx, c)
 		a.Err = err
 		if err == nil {
+			en.RejectedDrawing = ""
 			en.TextChecked, en.Text = true, n.HasRecognition()
 			if en.Text {
 				a.Err = r.publishDrawing(ctx, c.ID, en, nil, n.Clean().Text(true))
@@ -72,9 +73,25 @@ func (r *run) addDrawingText(ctx context.Context, c port.Entry, en entry) {
 	r.checkpoint(ctx)
 }
 
+// Read the listed entry so a path change cannot associate a parse error
+// with another notebook's journal record.
+func (r *run) readDrawingText(ctx context.Context, c port.Entry) (port.Notebook, error) {
+	file, err := r.e.cloud.Download(ctx, c, nil)
+	if err != nil {
+		return port.Notebook{}, err
+	}
+	defer func() { _ = r.e.files.Remove(file) }()
+	n, err := r.e.notes.Read(ctx, file, nil, nil)
+	r.rememberDrawingError(ctx, c, r.rejectionKey(c.Hash, textCheck), file, c.Hash, err)
+	return n, err
+}
+
 func (r *run) drawing(ctx context.Context, c, mark port.Entry, en entry, out, version string) {
 	if r.drawingPending(c.ID, out) {
 		r.record(port.MirrorAction{Kind: port.MirrorSkip, Path: out, Document: c.ID, Detail: "drawing publication awaits recovery"})
+		return
+	}
+	if r.rejectedDrawing(c, en, version, drawingRevision) {
 		return
 	}
 	a := port.MirrorAction{Kind: port.MirrorDraw, Path: r.relative(c), To: out, Document: c.ID}
@@ -98,7 +115,7 @@ func (r *run) draw(ctx context.Context, c, mark port.Entry, en entry, out, versi
 		return nil, err
 	}
 	defer func() { _ = r.e.files.Remove(temp) }()
-	input := original
+	input, inputHash := original, c.Hash
 	opts := port.RenderOptions{Format: "pdf"}
 	if mark.ID != "" {
 		input, err = r.e.cloud.Download(ctx, mark, nil)
@@ -106,16 +123,19 @@ func (r *run) draw(ctx context.Context, c, mark port.Entry, en entry, out, versi
 			return nil, err
 		}
 		defer func() { _ = r.e.files.Remove(input) }()
+		inputHash = mark.Hash
 		opts.Source = original
 	}
 	report, err := r.e.notes.Render(ctx, input, temp, opts)
 	if err != nil {
+		r.rememberDrawingError(ctx, c, r.rejectionKey(version, drawingRevision), input, inputHash, err)
 		return nil, err
 	}
 	text := ""
 	if mark.ID == "" {
 		n, readErr := r.e.notes.Read(ctx, input, nil, nil)
 		if readErr != nil {
+			r.rememberDrawingError(ctx, c, r.rejectionKey(version, drawingRevision), input, inputHash, readErr)
 			return nil, readErr
 		}
 		en.TextChecked = true
@@ -143,6 +163,46 @@ func (r *run) draw(ctx context.Context, c, mark port.Entry, en entry, out, versi
 		return nil, err
 	}
 	return report.Warnings, nil
+}
+
+const (
+	drawingRevision = "drawing"
+	textCheck       = "text check"
+)
+
+func (r *run) rejectionKey(version, operation string) string {
+	if r.e.libraryVersions == "" || version == "" {
+		return ""
+	}
+	return operation + ":" + r.e.libraryVersions + ":" + version
+}
+
+func (r *run) rejectedDrawing(c port.Entry, en entry, version, operation string) bool {
+	if en.RejectedDrawing == "" || en.RejectedDrawing != r.rejectionKey(version, operation) {
+		return false
+	}
+	r.record(port.MirrorAction{Kind: port.MirrorWarning, Path: r.relative(c), Document: c.ID,
+		Detail: "reader rejected this " + operation + " for this revision; waiting for changed content or library version"})
+	return true
+}
+
+// Only a parser rejection of the verified input survives the pass.
+func (r *run) rememberDrawingError(ctx context.Context, c port.Entry, key, file, expectedHash string, err error) {
+	if !errors.Is(err, port.ErrNotebookContent) || key == "" || ctx.Err() != nil ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return
+	}
+	// A fresh download can race a cloud edit after the pass listed its revision.
+	sum, hashErr := r.e.files.Hash(file)
+	if hashErr != nil || !strings.EqualFold(sum, expectedHash) {
+		return
+	}
+	en := r.j.Items[c.ID]
+	if en.Path == "" {
+		en.CloudPath, en.Record = c.Path, c.Hash
+	}
+	en.RejectedDrawing = key
+	r.j.Items[c.ID] = en
 }
 
 // documentDrawings runs after reconciliation so downloads, renames and uploads
@@ -246,10 +306,11 @@ func (r *run) drawingWarning(id string, en *entry, warning string) {
 // Legacy paths remain tracked until their replacements have been published.
 // The output path, rather than the journal version, keeps failed draws pending.
 func (r *run) migrateDrawings(ctx context.Context) error {
-	if r.opts.DryRun {
-		return nil
-	}
 	for _, d := range slices.Clone(r.j.Drawings) {
+		if r.opts.DryRun {
+			r.record(port.MirrorAction{Kind: port.MirrorDraw, Path: d.Entry.Output, Document: d.ID, Detail: "retry staged drawing publication"})
+			continue
+		}
 		if err := r.completeDrawing(ctx, d); err != nil {
 			r.record(port.MirrorAction{Kind: port.MirrorDraw, Path: d.Entry.Output, Document: d.ID, Err: err})
 			if r.failure != nil {
@@ -283,6 +344,9 @@ func (r *run) retainDrawingInputs() {
 }
 
 func (r *run) retireDrawing(ctx context.Context, id string, en entry) {
+	if r.drawingPending(id, en.Output) {
+		return
+	}
 	a := port.MirrorAction{Kind: port.MirrorRemove, Path: en.Output, Document: id}
 	if !r.opts.DryRun {
 		a.To, a.Err = r.aside(en.Output)

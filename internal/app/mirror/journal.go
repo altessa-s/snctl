@@ -59,6 +59,8 @@ type entry struct {
 	// Recover records replacement intent until the uploaded original is verified.
 	Recover      bool `json:"recover"`
 	RestoreLocal bool `json:"restore_local"`
+	// RejectedDrawing keys a failed parse by operation, linked libraries and input revision.
+	RejectedDrawing string `json:"rejected_drawing,omitempty"`
 }
 
 func readJournal(root port.OutputDirectory) (*journal, error) {
@@ -103,9 +105,20 @@ func (j *journal) write(ctx context.Context, root port.OutputDirectory) error {
 	})
 }
 
+func (e entry) drawingOnlyDocument() bool {
+	return e.Path == "" && domain.MirrorUploadable(e.CloudPath)
+}
+
+func (e entry) ownsLocalOutput() bool { return e.Path != "" || e.Output != "" }
+
+// countsForDeletion includes live owners of local originals or notebook outputs.
+func (e entry) countsForDeletion() bool {
+	return !e.Detached && !e.drawingOnlyDocument() && e.ownsLocalOutput()
+}
+
 func (j *journal) tracked() (all, local int) {
 	for _, e := range j.Items {
-		if !e.Detached {
+		if e.countsForDeletion() {
 			all++
 			if e.Path != "" {
 				local++

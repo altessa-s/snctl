@@ -231,7 +231,7 @@ func setup(t *testing.T) *fixture {
 	disk := localfs.Files{}
 	writer := files.Service{Cloud: c, Local: disk, Disk: disk, Lock: c}
 	dir := t.TempDir()
-	e := NewEngine(Deps{Cloud: c, Upload: writer, Library: writer, Files: disk, Disk: disk, Notes: noteRender{}, Feed: c, Dirs: noWatcher{}, Timer: timer{}, Lock: c})
+	e := NewEngine(Deps{LibraryVersions: "reader1/render1", Cloud: c, Upload: writer, Library: writer, Files: disk, Disk: disk, Notes: noteRender{}, Feed: c, Dirs: noWatcher{}, Timer: timer{}, Lock: c})
 	return &fixture{t: t, c: c, e: e, dir: dir, spec: port.MirrorSpec{Name: "papers", Dir: dir, Folder: "/DOCUMENT/Document/Papers", Profile: "default"}}
 }
 func (f *fixture) write(rel, body string) {

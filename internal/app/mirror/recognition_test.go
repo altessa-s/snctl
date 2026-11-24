@@ -13,8 +13,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/altessa-s/snctl/internal/adapter/localfs"
+	"github.com/altessa-s/snctl/internal/app/files"
+	"github.com/altessa-s/snctl/internal/app/notebooks"
 	"github.com/altessa-s/snctl/internal/domain"
 	"github.com/altessa-s/snctl/internal/port"
+	"github.com/altessa-s/snctl/internal/porttest"
 )
 
 type recognizedNotes struct {
@@ -263,5 +267,97 @@ func TestTextRetirementsPlannedAndUntrackedTextPreserved(t *testing.T) {
 	f.pass(port.MirrorRunOptions{})
 	if !strings.Contains(f.read(".snctl-removed/_annotated/notebooks/X (2).md"), "recognized") {
 		t.Fatal("tracked text not retained")
+	}
+}
+
+func TestCurrentDrawingWarnsOfRejectedTextCheck(t *testing.T) {
+	f := setup(t)
+	f.spec.PullNew = true
+	c := f.c.seed("DOCUMENT/Document/Papers/X.note", "notebook")
+	f.pass(port.MirrorRunOptions{})
+	r := drawingRun(t, f)
+	en := r.j.Items[c.ID]
+	en.TextChecked = false
+	r.j.Items[c.ID] = en
+	if err := r.j.write(t.Context(), r.root); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.root.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := &drawingRequests{Files: f.c}
+	f.e.cloud = req
+	f.e.notes = recognizedNotes{readErr: port.ErrNotebookContent}
+	if _, err := f.e.Pass(t.Context(), f.spec, port.MirrorRunOptions{}); !errors.Is(err, port.ErrNotebookContent) {
+		t.Fatal(err)
+	}
+	p := f.pass(port.MirrorRunOptions{})
+	if len(p.Actions) != 1 || p.Actions[0].Kind != port.MirrorWarning || !strings.Contains(p.Actions[0].Detail, "text check") || req.downloads != 1 || f.read(en.Output) != "%PDF notebook" {
+		t.Fatal(p, req.downloads)
+	}
+}
+
+type countingIndex struct {
+	writes, merges int
+	values         map[string]bool
+}
+
+func (*countingIndex) Recognition(string) *bool { return nil }
+func (c *countingIndex) RememberRecognition(context.Context, string, bool) error {
+	c.writes++
+	return nil
+}
+func (*countingIndex) RecognitionSnapshot() map[string]bool { return nil }
+func (c *countingIndex) RememberRecognitions(_ context.Context, values map[string]bool) error {
+	c.merges++
+	c.values = values
+	return nil
+}
+
+type observingCloud struct {
+	port.Files
+	notes notebooks.Service
+}
+
+func (c observingCloud) Download(ctx context.Context, e port.Entry, p port.Progress) (string, error) {
+	file, err := c.Files.Download(ctx, e, p)
+	if err == nil {
+		c.notes.ObserveBody(ctx, e, file)
+	}
+	return file, err
+}
+
+func TestFolderTransferAndMirrorPassMergeRecognitionOnce(t *testing.T) {
+	for _, op := range []string{"folder download", "mirror pass"} {
+		t.Run(op, func(t *testing.T) {
+			f := setup(t)
+			f.spec.PullNew = true
+			index := &countingIndex{}
+			disk := localfs.Files{}
+			notes := notebooks.Service{Index: index, Files: disk, Reader: porttest.NoteReader{Notebook: port.Notebook{Kind: "note", Pages: []port.NotePage{{Number: 1, Recognition: "text"}}}}, Renderer: porttest.Renderer{Pages: 1}}
+			remote := observingCloud{Files: f.c, notes: notes}
+			var hashes []string
+			for _, name := range []string{"a", "b", "c"} {
+				e := f.c.seed("DOCUMENT/Document/Papers/"+name+".note", name)
+				hashes = append(hashes, e.Hash)
+			}
+			if op == "folder download" {
+				transfer := files.Service{Cloud: remote, Disk: disk, Recognition: notes.BatchRecognition}
+				if _, err := transfer.Mirror(t.Context(), "/", t.TempDir(), port.MirrorOptions{Jobs: 1}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				f.e.notes, f.e.cloud = notes, remote
+				f.pass(port.MirrorRunOptions{})
+			}
+			if index.writes != 0 || index.merges != 1 || len(index.values) != len(hashes) {
+				t.Fatalf("single writes=%d merges=%d values=%v", index.writes, index.merges, index.values)
+			}
+			for _, hash := range hashes {
+				if !index.values[hash] {
+					t.Errorf("missing recognized hash %s", hash)
+				}
+			}
+		})
 	}
 }

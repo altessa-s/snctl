@@ -208,8 +208,14 @@ rendering into the namespaced layout.
 If both staged and published Markdown are missing during recovery, the intent is
 abandoned and the notebook is redrawn. A persistent publication failure (for
 example, a directory at the `.md` target) retains the intent and stages for retry,
-just as a failed PDF publication does. Only that owner and its reserved output
-names wait; unrelated drawings continue. Remove the obstruction and rerun to
+just as a failed PDF publication does. The pass reports the publication error on
+each retry. The original PDF or EPUB continues to sync edits, renames and
+deletions in both directions. If the original is deleted or replaced under a new
+cloud ID, its old ID keeps the stages and drawing paths reserved. Recovery
+finishes the staged publication (or restores prior drawings if the stage and
+output are missing), then retains the deleted original's drawing in
+`.snctl-removed/` before dropping its journal entry. The original path is
+available for reuse while publication is blocked. Remove the obstruction and rerun to
 publish the staged bytes. An existing untracked regular `.md` is retained under
 `.snctl-removed/` before replacement. Dry runs report a conditional Markdown
 retirement when a current companion would be removed if recognition disappeared;
@@ -252,6 +258,11 @@ originals. EPUB annotation overlays are unsupported: the pass warns and skips
 those drawings while continuing to mirror EPUB originals. Incomplete or
 case-duplicate sidecars skip only the affected drawing with a warning. Ambiguous
 legacy sidecars warn once per change of the ambiguity, including after a restart.
+If parsing the verified notebook or mark fails, the pass reports the error.
+Later passes warn and skip downloads for the affected drawing or text check.
+A change to the input revision or the linked reader or renderer version retries
+the operation. I/O, unavailable capabilities, invalid options and render limits
+retry on each pass.
 A failed or skipped document reconciliation defers its drawing until a later pass;
 drawing never changes the original document's reconciliation markers.
 

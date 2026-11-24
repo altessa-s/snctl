@@ -14,6 +14,9 @@ import (
 	"github.com/altessa-s/snctl/internal/port"
 )
 
+// LibraryVersion identifies the linked library for mirror rejection records.
+const LibraryVersion = "unavailable"
+
 // Renderer keeps rendering commands present in portable builds.
 type Renderer struct{}
 

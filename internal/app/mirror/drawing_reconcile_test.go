@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -355,5 +356,173 @@ func TestDrawingDisplacesDeletedOwner(t *testing.T) {
 	}
 	if p := f.pass(port.MirrorRunOptions{}); len(p.Actions) != 0 {
 		t.Fatal(p)
+	}
+}
+
+func TestRejectedDrawingRevision(t *testing.T) {
+	for _, source := range []string{"notebook", "overlay"} {
+		t.Run(source, func(t *testing.T) {
+			f, _, doc, mark := overlayFixture(t)
+			if source == "notebook" {
+				delete(f.c.entries, doc.ID)
+				delete(f.c.entries, mark.ID)
+				doc = f.c.seed("DOCUMENT/Document/Papers/Report.note", "bad notebook")
+			}
+			f.e.notes = noteRender{err: port.ErrNotebookContent}
+			req := &drawingRequests{Files: f.c}
+			f.e.cloud = req
+			if _, err := f.e.Pass(t.Context(), f.spec, port.MirrorRunOptions{}); !errors.Is(err, port.ErrNotebook) {
+				t.Fatal(err)
+			}
+			first := req.downloads
+			if first == 0 || savedJournal(t, f).Items[doc.ID].RejectedDrawing == "" {
+				t.Fatal("missing failure marker")
+			}
+			for range 2 {
+				p := f.pass(port.MirrorRunOptions{})
+				if len(p.Actions) != 1 || p.Actions[0].Kind != port.MirrorWarning || req.downloads != first {
+					t.Fatal("repeated request or missing warning", p, req.downloads)
+				}
+			}
+			f.e.notes = noteRender{}
+			name := doc.Name
+			if source == "overlay" {
+				name = mark.Name
+			}
+			f.remoteChange(name, "readable now")
+			if p := f.pass(port.MirrorRunOptions{}); !has(p, port.MirrorDraw) || req.downloads <= first || savedJournal(t, f).Items[doc.ID].RejectedDrawing != "" {
+				t.Fatal(p, req.downloads)
+			}
+		})
+	}
+}
+
+func TestTransientDrawingErrorsRetry(t *testing.T) {
+	for _, fault := range []error{port.ErrNotebook, port.ErrPage, port.ErrOptions, os.ErrPermission, port.ErrNotebookUnavailable, port.ErrRenderUnavailable, context.Canceled, errors.Join(port.ErrNotebookContent, context.DeadlineExceeded)} {
+		t.Run(fault.Error(), func(t *testing.T) {
+			f := setup(t)
+			f.spec.PullNew = true
+			c := f.c.seed("DOCUMENT/Document/Papers/Retry.note", "notebook")
+			f.e.notes = noteRender{err: fault}
+			req := &drawingRequests{Files: f.c}
+			f.e.cloud = req
+			for want := 1; want <= 3; want++ {
+				_, err := f.e.Pass(t.Context(), f.spec, port.MirrorRunOptions{})
+				if !errors.Is(err, fault) || req.downloads != want || savedJournal(t, f).Items[c.ID].RejectedDrawing != "" {
+					t.Fatal("transient failure suppressed", err, req.downloads)
+				}
+			}
+		})
+	}
+}
+
+func TestRejectionRetriesWithNewLibraryVersion(t *testing.T) {
+	for _, versions := range []string{"reader2/render1", "reader1/render2"} {
+		t.Run(versions, func(t *testing.T) {
+			f := setup(t)
+			f.spec.PullNew = true
+			c := f.c.seed("DOCUMENT/Document/Papers/X.note", "same bytes")
+			req := &drawingRequests{Files: f.c}
+			f.e.cloud = req
+			f.e.notes = noteRender{err: port.ErrNotebookContent}
+			if _, err := f.e.Pass(t.Context(), f.spec, port.MirrorRunOptions{}); !errors.Is(err, port.ErrNotebookContent) {
+				t.Fatal(err)
+			}
+			if marker := savedJournal(t, f).Items[c.ID].RejectedDrawing; !strings.Contains(marker, f.e.libraryVersions) {
+				t.Fatalf("marker %q omits linked versions", marker)
+			}
+			f.e.libraryVersions = versions
+			f.e.notes = noteRender{}
+			p := f.pass(port.MirrorRunOptions{})
+			if req.downloads != 2 || !has(p, port.MirrorDraw) || savedJournal(t, f).Items[c.ID].RejectedDrawing != "" {
+				t.Fatal(p, req.downloads)
+			}
+		})
+	}
+}
+
+func TestRejectionRequiresListedBytes(t *testing.T) {
+	f := setup(t)
+	f.spec.PullNew = true
+	c := f.c.seed("DOCUMENT/Document/Papers/X.note", "listed")
+	f.c.data[c.ID] = "changed after listing"
+	f.e.notes = noteRender{err: port.ErrNotebookContent}
+	if _, err := f.e.Pass(t.Context(), f.spec, port.MirrorRunOptions{}); !errors.Is(err, port.ErrNotebookContent) {
+		t.Fatal(err)
+	}
+	if marker := savedJournal(t, f).Items[c.ID].RejectedDrawing; marker != "" {
+		t.Fatal(marker)
+	}
+}
+
+func TestRejectedNotebooksExcludedFromDeletionGuard(t *testing.T) {
+	for _, missing := range []int{1, 2} {
+		t.Run(fmt.Sprint(missing), func(t *testing.T) {
+			f := setup(t)
+			f.spec.PullNew = true
+			f.e.notes = noteRender{err: port.ErrNotebookContent}
+			f.c.seed("DOCUMENT/Document/Papers/keep.pdf", "keep")
+			for i := range missing {
+				f.c.seed(fmt.Sprintf("DOCUMENT/Document/Papers/%d.pdf", i), "original")
+			}
+			var rejected []port.Entry
+			for _, name := range []string{"a", "b"} {
+				rejected = append(rejected, f.c.seed("DOCUMENT/Document/Papers/"+name+".note", name))
+			}
+			if _, err := f.e.Pass(t.Context(), f.spec, port.MirrorRunOptions{}); !errors.Is(err, port.ErrNotebookContent) {
+				t.Fatal(err)
+			}
+			for i := range missing {
+				delete(f.c.entries, f.remote(fmt.Sprintf("%d.pdf", i)).ID)
+			}
+			if missing == 1 {
+				// Missing marker-only items must not inflate the number of deletions.
+				for _, c := range rejected {
+					delete(f.c.entries, c.ID)
+				}
+			}
+			// With two real deletions the surviving markers cannot dilute the denominator.
+			p := f.pass(port.MirrorRunOptions{})
+			if has(p, port.MirrorRemove) != (missing == 1) {
+				t.Fatalf("missing=%d actions=%+v", missing, p.Actions)
+			}
+			if missing == 1 {
+				j := savedJournal(t, f)
+				for _, c := range rejected {
+					if _, ok := j.Items[c.ID]; ok {
+						t.Fatal("missing notebook still tracked", c)
+					}
+				}
+				if f.read(".snctl-removed/0.pdf") != "original" {
+					t.Fatal("original missing")
+				}
+			}
+		})
+	}
+}
+
+func TestMissingNotebookWithoutOwnershipIsForgotten(t *testing.T) {
+	f := setup(t)
+	f.spec.PullNew, f.spec.NoDelete = true, true
+	c := f.c.seed("DOCUMENT/Document/Papers/X.note", "notebook")
+	f.e.notes = noteRender{err: port.ErrNotebookContent}
+	if _, err := f.e.Pass(t.Context(), f.spec, port.MirrorRunOptions{}); !errors.Is(err, port.ErrNotebookContent) {
+		t.Fatal(err)
+	}
+	r := drawingRun(t, f)
+	// A detached notebook can also lose its last output to a new drawing owner.
+	en := r.j.Items[c.ID]
+	en.Detached = true
+	r.j.Items[c.ID] = en
+	if err := r.j.write(t.Context(), r.root); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.root.Close(); err != nil {
+		t.Fatal(err)
+	}
+	delete(f.c.entries, c.ID)
+	p := f.pass(port.MirrorRunOptions{})
+	if _, ok := savedJournal(t, f).Items[c.ID]; ok || len(p.Actions) != 0 {
+		t.Fatal("empty owner survived or scheduled a deletion", p)
 	}
 }

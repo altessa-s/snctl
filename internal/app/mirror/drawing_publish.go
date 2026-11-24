@@ -187,15 +187,6 @@ func (r *run) cleanupDrawingStages() error {
 	return result
 }
 
-// Drawing I/O failures are local to a drawing. Journal failures alone stop the pass.
-func (r *run) writeDrawingJournal(ctx context.Context) error {
-	err := r.j.write(ctx, r.root)
-	if err != nil {
-		r.failure = err
-	}
-	return err
-}
-
 func (r *run) publishDrawing(ctx context.Context, id string, en entry, in io.Reader, text ...string) error {
 	retired, err := r.drawingRetirements(id, en.Output)
 	if err != nil {
@@ -226,7 +217,7 @@ func (r *run) publishDrawing(ctx context.Context, id string, en entry, in io.Rea
 	}
 
 	r.j.Drawings = append(r.j.Drawings, d)
-	if err = r.writeDrawingJournal(ctx); err != nil {
+	if err = r.writeJournal(ctx); err != nil {
 		// No live path has changed, and no durable intent references the stage.
 		r.j.Drawings = slices.Delete(r.j.Drawings, len(r.j.Drawings)-1, len(r.j.Drawings))
 		return errors.Join(err, r.cleanupDrawingStages())
@@ -274,6 +265,7 @@ func (r *run) completeDrawing(ctx context.Context, d *drawingChange) error {
 		r.j.Items[old.Owner] = en
 	}
 	en := r.j.Items[d.ID]
+	en.RejectedDrawing = ""
 	en.Output, en.Drawn = d.Entry.Output, d.Entry.Drawn
 	en.Text, en.TextChecked = d.Entry.Text, d.Entry.TextChecked
 	if d.Entry.Path == "" && en.Path == "" {
@@ -325,7 +317,7 @@ func (r *run) publishDrawingPDF(ctx context.Context, d *drawingChange, staged bo
 func (r *run) dropDrawing(ctx context.Context, d *drawingChange) error {
 	previous := slices.Clone(r.j.Drawings)
 	r.j.Drawings = slices.DeleteFunc(r.j.Drawings, func(other *drawingChange) bool { return other == d })
-	if err := r.writeDrawingJournal(ctx); err != nil {
+	if err := r.writeJournal(ctx); err != nil {
 		r.j.Drawings = previous
 		return err
 	}
@@ -371,7 +363,7 @@ func (r *run) moveDrawingPaths(ctx context.Context, d *drawingChange, before boo
 				return asideErr
 			}
 			old.To = to
-			if err = r.writeDrawingJournal(ctx); err != nil {
+			if err = r.writeJournal(ctx); err != nil {
 				return err
 			}
 		}
